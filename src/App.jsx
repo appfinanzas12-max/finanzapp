@@ -957,7 +957,6 @@ export default function App() {
                   version: "v1.0.0.1 (beta)",
                   fecha: "Mayo 2025",
                   cambios: [
-                    "Login con Google y correo/contraseña",
                     "Registro de ingresos y egresos con categorías predefinidas",
                     "Gestión de deudas con recordatorio por WhatsApp",
                     "Marcar deudas como pagadas",
@@ -965,6 +964,7 @@ export default function App() {
                     "Perfil personalizable (nombre, moneda, meta de ahorro)",
                     "Filtros en transacciones (todos, ingresos, egresos)",
                     "Formato de moneda con separadores de miles",
+                    "Botón Contáctanos directo a WhatsApp para sugerencias",
                   ],
                 },
               ].map((release) => (
