@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Regla principal: cada usuario solo puede leer y escribir SUS PROPIOS datos.
+    // Nadie más puede ver ni tocar los datos de otro usuario.
+    match /users/{userId}/{document=**} {
+
+      // Solo se permite el acceso si:
+      // 1. El usuario está autenticado (request.auth != null)
+      // 2. El ID del usuario autenticado es exactamente el mismo del documento (request.auth.uid == userId)
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Todo lo demás está bloqueado por defecto.
+    // Si alguien intenta acceder a cualquier otra ruta, se deniega automáticamente.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
