@@ -114,6 +114,26 @@ export default function App() {
     "Todo se guardó exitosamente",
   ];
 
+  // Cierre automático por inactividad de 1 hora
+  useEffect(() => {
+    if (!user) return;
+    const INACTIVIDAD_MS = 60 * 60 * 1000; // 1 hora
+    let timer = setTimeout(() => handleLogout(), INACTIVIDAD_MS);
+
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => handleLogout(), INACTIVIDAD_MS);
+    };
+
+    const eventos = ["mousemove", "keydown", "touchstart", "click", "scroll"];
+    eventos.forEach((e) => window.addEventListener(e, resetTimer));
+
+    return () => {
+      clearTimeout(timer);
+      eventos.forEach((e) => window.removeEventListener(e, resetTimer));
+    };
+  }, [user]);
+
   // Avanza los pasos de la animación uno por uno
   useEffect(() => {
     if (!splashMode) return;
@@ -937,26 +957,14 @@ export default function App() {
                   version: "v1.0.0.1 (beta)",
                   fecha: "Mayo 2025",
                   cambios: [
-                    "Lanzamiento inicial de FinanzApp",
                     "Login con Google y correo/contraseña",
-                    "Registro de ingresos y egresos",
+                    "Registro de ingresos y egresos con categorías predefinidas",
                     "Gestión de deudas con recordatorio por WhatsApp",
-                    "Botón para eliminar transacciones equivocadas",
-                    "Confirmación antes de borrar deudas o transacciones",
-                    "Botón Guardar se bloquea para evitar duplicados",
-                    "Mensajes de error visibles al usuario",
-                    "Perfil personalizable (nombre, moneda, meta de ahorro)",
-                    "Animación de cierre de sesión",
-                    "Filtros en transacciones (todos, ingresos, egresos)",
-                    "Descripción opcional en transacciones",
-                    "Fecha visible en deudas",
-                    "Formato de miles en todos los montos ($1.200.000)",
-                    "Fecha visible en cada transacción",
-                    "Monto visible en tarjetas de deuda",
                     "Marcar deudas como pagadas",
-                    "Analytics con totales reales de ingresos y egresos",
-                    "Resumen mensual de movimientos",
-                    "Categorías predefinidas al registrar transacciones",
+                    "Analytics con totales y resumen mensual",
+                    "Perfil personalizable (nombre, moneda, meta de ahorro)",
+                    "Filtros en transacciones (todos, ingresos, egresos)",
+                    "Formato de moneda con separadores de miles",
                   ],
                 },
               ].map((release) => (
@@ -998,6 +1006,19 @@ export default function App() {
             </div>
 
             {/* Versión */}
+            <a
+              href="https://wa.me/573024555562?text=Hola%2C%20tengo%20una%20sugerencia%20para%20FinanzApp%3A"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 bg-green-500/10 border border-green-500/20 rounded-3xl p-5 w-full"
+            >
+              <MessageCircle size={22} className="text-green-400 shrink-0" />
+              <div>
+                <p className="font-black text-green-400">Contáctanos</p>
+                <p className="text-zinc-500 text-xs mt-0.5">¿Tienes sugerencias o comentarios? Escríbenos por WhatsApp</p>
+              </div>
+            </a>
+
             <p className="text-center text-zinc-700 text-xs pb-2">
               FinanzApp v1.0.0.1 (beta) · DEV Zaack
             </p>
