@@ -80,7 +80,6 @@ export default function App() {
   });
 
   useEffect(() => {
-    // Guardamos las funciones para cerrar los escuchas de Firestore
     let unsubTx = null;
     let unsubDebts = null;
 
@@ -88,7 +87,6 @@ export default function App() {
       setUser(u);
       setLoading(false);
 
-      // Si el usuario cierra sesión, cerramos los escuchas activos
       if (!u) {
         if (unsubTx) unsubTx();
         if (unsubDebts) unsubDebts();
@@ -107,27 +105,15 @@ export default function App() {
         orderBy("createdAt", "desc")
       );
 
-      // Guardamos la función de cierre que devuelve onSnapshot
       unsubTx = onSnapshot(txRef, (snap) => {
-        setTransactions(
-          snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data()
-          }))
-        );
+        setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       });
 
       unsubDebts = onSnapshot(debtRef, (snap) => {
-        setDebts(
-          snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data()
-          }))
-        );
+        setDebts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       });
     });
 
-    // Al desmontar el componente, cerramos todo
     return () => {
       unsub();
       if (unsubTx) unsubTx();
@@ -276,7 +262,6 @@ export default function App() {
     );
   };
 
-  // Convierte el timestamp de Firestore a texto legible: "12 mayo 2025"
   const formatFecha = (ts) => {
     if (!ts) return "";
     const fecha = ts.toDate ? ts.toDate() : new Date(ts);
@@ -366,34 +351,6 @@ export default function App() {
 
           </div>
         </div>
-
-        <style>
-          {`
-          @keyframes zoomIn {
-            from {
-              opacity: 0;
-              transform: scale(0.92);
-            }
-
-            to {
-              opacity: 1;
-              transform: scale(1);
-            }
-          }
-
-          @keyframes fadeUp {
-            from {
-              opacity: 0;
-              transform: translateY(10px);
-            }
-
-            to {
-              opacity: 1;
-              transform: translateY(0px);
-            }
-          }
-          `}
-        </style>
 
       </div>
     );
@@ -592,7 +549,6 @@ export default function App() {
 
             <h2 className="text-3xl font-black">Analytics</h2>
 
-            {/* Tarjetas de totales */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-4 text-center">
                 <TrendingUp size={20} className="mx-auto text-cyan-400 mb-2" />
@@ -623,7 +579,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Contadores */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-4">
                 <p className="text-zinc-500 text-xs">Transacciones</p>
@@ -637,11 +592,9 @@ export default function App() {
               </div>
             </div>
 
-            {/* Resumen mensual */}
             <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5">
               <h3 className="font-black text-lg mb-4">Resumen por mes</h3>
               {(() => {
-                // Agrupa transacciones por mes
                 const porMes = {};
                 transactions.forEach(tx => {
                   if (!tx.createdAt) return;
@@ -692,7 +645,6 @@ export default function App() {
 
             <h2 className="text-3xl font-black">Configuración</h2>
 
-            {/* Info del usuario */}
             <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5">
               <p className="text-zinc-500 text-xs uppercase tracking-widest mb-1">Cuenta</p>
               <p className="font-black text-lg truncate">{user.email}</p>
@@ -705,7 +657,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Novedades */}
             <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <CheckCircle2 size={20} className="text-cyan-400" />
@@ -753,7 +704,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* Próximamente */}
             <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 space-y-3">
               <div className="flex items-center gap-2 mb-2">
                 <Rocket size={20} className="text-yellow-400" />
