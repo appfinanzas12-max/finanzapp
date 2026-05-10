@@ -16,7 +16,9 @@ import {
   Clock,
   Check,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Target,
+  Pencil
 } from "lucide-react";
 
 import {
@@ -33,6 +35,8 @@ import {
   deleteDoc,
   doc,
   updateDoc,
+  setDoc,
+  getDoc,
   onSnapshot,
   query,
   orderBy,
@@ -73,6 +77,11 @@ export default function App() {
 
   // Estado para filtro activo en wallet
   const [filtro, setFiltro] = useState("all");
+
+  // Perfil del usuario
+  const [perfil, setPerfil] = useState({ nombre: "", moneda: "$", meta: "" });
+  const [editandoPerfil, setEditandoPerfil] = useState(false);
+  const [perfilForm, setPerfilForm] = useState({ nombre: "", moneda: "$", meta: "" });
 
   const [formData, setFormData] = useState({
     type: "income",
@@ -171,6 +180,15 @@ export default function App() {
 
       unsubDebts = onSnapshot(debtRef, (snap) => {
         setDebts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      });
+
+      // Carga el perfil del usuario
+      getDoc(doc(db, "users", u.uid, "profile", "data")).then((snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setPerfil(data);
+          setPerfilForm(data);
+        }
       });
     });
 
@@ -328,6 +346,17 @@ export default function App() {
     setSplashMode("logout");
   };
 
+  const guardarPerfil = async () => {
+    try {
+      await setDoc(doc(db, "users", user.uid, "profile", "data"), perfilForm);
+      setPerfil(perfilForm);
+      setEditandoPerfil(false);
+    } catch (err) {
+      console.log(err);
+      alert("Error al guardar el perfil. Revisa tu conexión.");
+    }
+  };
+
   const formatFecha = (ts) => {
     if (!ts) return "";
     const fecha = ts.toDate ? ts.toDate() : new Date(ts);
@@ -338,7 +367,7 @@ export default function App() {
     });
   };
 
-  const fmt = (n) => Number(n).toLocaleString("es-CO");
+  const fmt = (n) => `${perfil.moneda || "$"}${Number(n).toLocaleString("es-CO")}`;
 
   if (loading) {
     return (
@@ -378,7 +407,9 @@ export default function App() {
         </div>
         {splashDone && (
           <div className="mt-12 text-center animate-[fadeUp_0.5s_ease]">
-            <p className="text-2xl font-black text-white">Bienvenido de vuelta 👋</p>
+            <p className="text-2xl font-black text-white">
+              Bienvenido{perfil.nombre ? `, ${perfil.nombre}` : " de vuelta"} 👋
+            </p>
             <p className="text-zinc-500 text-sm mt-2">{user?.email}</p>
           </div>
         )}
@@ -735,9 +766,39 @@ export default function App() {
               </div>
             </div>
 
+            {perfil.meta && Number(perfil.meta) > 0 && (
+              <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Target size={18} className="text-yellow-400" />
+                  <h3 className="font-black text-lg">Meta de ahorro mensual</h3>
+                </div>
+                {(() => {
+                  const meta = Number(perfil.meta);
+                  const progreso = Math.min((balance / meta) * 100, 100);
+                  const alcanzada = balance >= meta;
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-zinc-400">Balance actual: <span className="font-black text-white">{fmt(balance)}</span></span>
+                        <span className="text-zinc-400">Meta: <span className="font-black text-yellow-400">{fmt(meta)}</span></span>
+                      </div>
+                      <div className="w-full bg-zinc-800 rounded-full h-3">
+                        <div
+                          className={`h-3 rounded-full transition-all duration-500 ${alcanzada ? "bg-green-400" : "bg-cyan-400"}`}
+                          style={{ width: `${Math.max(progreso, 0)}%` }}
+                        />
+                      </div>
+                      <p className={`text-xs mt-2 font-black ${alcanzada ? "text-green-400" : "text-zinc-500"}`}>
+                        {alcanzada ? "✅ Meta alcanzada" : `${Math.max(0, Math.round(progreso))}% completado`}
+                      </p>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
             <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5">
-              <h3 className="font-black text-lg mb-4">Resumen por mes</h3>
-              {(() => {
+              <h3 className="font-black text-lg mb-4">Resumen por mes</h3>              {(() => {
                 const porMes = {};
                 transactions.forEach(tx => {
                   if (!tx.createdAt) return;
@@ -785,8 +846,77 @@ export default function App() {
             <h2 className="text-3xl font-black">Configuración</h2>
 
             <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5">
-              <p className="text-zinc-500 text-xs uppercase tracking-widest mb-1">Cuenta</p>
-              <p className="font-black text-lg truncate">{user.email}</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-zinc-500 text-xs uppercase tracking-widest">Perfil</p>
+                <button
+                  onClick={() => { setPerfilForm(perfil); setEditandoPerfil(!editandoPerfil); }}
+                  className="bg-zinc-800 text-zinc-400 p-2 rounded-xl"
+                >
+                  <Pencil size={14} />
+                </button>
+              </div>
+
+              {editandoPerfil ? (
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Tu nombre"
+                    value={perfilForm.nombre}
+                    onChange={(e) => setPerfilForm({ ...perfilForm, nombre: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none text-sm"
+                  />
+                  <select
+                    value={perfilForm.moneda}
+                    onChange={(e) => setPerfilForm({ ...perfilForm, moneda: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none text-sm"
+                  >
+                    <option value="$">$ — Peso colombiano (COP)</option>
+                    <option value="USD ">USD — Dólar americano</option>
+                    <option value="€">€ — Euro</option>
+                    <option value="£">£ — Libra esterlina</option>
+                    <option value="MXN ">MXN — Peso mexicano</option>
+                    <option value="S/ ">S/ — Sol peruano</option>
+                    <option value="Bs ">Bs — Bolívar venezolano</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Meta de ahorro mensual"
+                    value={perfilForm.meta}
+                    onChange={(e) => setPerfilForm({ ...perfilForm, meta: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={guardarPerfil}
+                      className="flex-1 bg-cyan-500 text-black py-3 rounded-2xl font-black text-sm"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      onClick={() => setEditandoPerfil(false)}
+                      className="flex-1 bg-zinc-800 text-zinc-400 py-3 rounded-2xl font-black text-sm"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="font-black text-lg">{perfil.nombre || "Sin nombre"}</p>
+                  <p className="text-zinc-500 text-sm truncate">{user.email}</p>
+                  <div className="flex gap-3 mt-2">
+                    <span className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1 text-xs text-zinc-400">
+                      Moneda: <span className="text-white font-black">{perfil.moneda || "$"}</span>
+                    </span>
+                    {perfil.meta && Number(perfil.meta) > 0 && (
+                      <span className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1 text-xs text-zinc-400">
+                        Meta: <span className="text-yellow-400 font-black">{fmt(perfil.meta)}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={handleLogout}
                 className="mt-4 flex items-center gap-2 bg-red-500/10 text-red-400 px-4 py-3 rounded-2xl font-black text-sm"
@@ -815,7 +945,7 @@ export default function App() {
                     "Confirmación antes de borrar deudas o transacciones",
                     "Botón Guardar se bloquea para evitar duplicados",
                     "Mensajes de error visibles al usuario",
-                    "Animación de bienvenida al iniciar sesión",
+                    "Perfil personalizable (nombre, moneda, meta de ahorro)",
                     "Animación de cierre de sesión",
                     "Filtros en transacciones (todos, ingresos, egresos)",
                     "Descripción opcional en transacciones",
@@ -857,8 +987,7 @@ export default function App() {
                 { icono: "📊", texto: "Gráficas visuales de ingresos vs egresos" },
                 { icono: "📄", texto: "Exportar reporte PDF o Excel" },
                 { icono: "📴", texto: "Modo sin conexión (offline)" },
-                { icono: "👤", texto: "Perfil de usuario personalizable" },
-                { icono: "💎", texto: "Plan Premium con funciones avanzadas" },
+                { icono: "�", texto: "Plan Premium con funciones avanzadas" },
               ].map((item, i) => (
                 <div key={i} className="flex items-center gap-3 bg-black rounded-2xl p-4 border border-zinc-800">
                   <span className="text-xl">{item.icono}</span>
