@@ -283,7 +283,7 @@ export default function App() {
             </h1>
 
             <p className="text-zinc-500 mt-2">
-              v1.1
+              v1.0.0.1 (beta)
             </p>
 
             <p className="text-xs tracking-[6px] uppercase mt-3 text-zinc-600">
@@ -616,34 +616,19 @@ export default function App() {
 
               {[
                 {
-                  version: "v1.2",
+                  version: "v1.0.0.1 (beta)",
                   fecha: "Mayo 2025",
-                  cambios: [
-                    "Botón para eliminar transacciones equivocadas",
-                    "Pestaña Configuración con log de actualizaciones",
-                    "Confirmación antes de borrar deudas",
-                    "Botón Guardar se bloquea para evitar duplicados",
-                    "Mensajes de error visibles al usuario",
-                  ],
-                },
-                {
-                  version: "v1.1",
-                  fecha: "Mayo 2025",
-                  cambios: [
-                    "Credenciales de Firebase protegidas",
-                    "Listeners de Firestore sin memory leaks",
-                    "Hora de transacciones desde el servidor",
-                    "Validación de montos negativos o cero",
-                  ],
-                },
-                {
-                  version: "v1.0",
-                  fecha: "Abril 2025",
                   cambios: [
                     "Lanzamiento inicial de FinanzApp",
                     "Login con Google y correo/contraseña",
                     "Registro de ingresos y egresos",
                     "Gestión de deudas con recordatorio por WhatsApp",
+                    "Botón para eliminar transacciones equivocadas",
+                    "Confirmación antes de borrar deudas o transacciones",
+                    "Botón Guardar se bloquea para evitar duplicados",
+                    "Mensajes de error visibles al usuario",
+                    "Credenciales de Firebase protegidas",
+                    "Pestaña Configuración con log de actualizaciones",
                   ],
                 },
               ].map((release) => (
@@ -688,7 +673,7 @@ export default function App() {
 
             {/* Versión */}
             <p className="text-center text-zinc-700 text-xs pb-2">
-              FinanzApp v1.2 · DEV Zaack
+              FinanzApp v1.0.0.1 (beta) · DEV Zaack
             </p>
 
           </div>
