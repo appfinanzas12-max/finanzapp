@@ -71,10 +71,14 @@ export default function App() {
   const [splashStep, setSplashStep] = useState(0);
   const [splashDone, setSplashDone] = useState(false);
 
+  // Estado para filtro activo en wallet
+  const [filtro, setFiltro] = useState("all");
+
   const [formData, setFormData] = useState({
     type: "income",
     amount: "",
-    category: ""
+    category: "",
+    description: ""
   });
 
   const [debtData, setDebtData] = useState({
@@ -226,7 +230,7 @@ export default function App() {
           createdAt: serverTimestamp()
         }
       );
-      setFormData({ type: "income", amount: "", category: "" });
+      setFormData({ type: "income", amount: "", category: "", description: "" });
       setShowTransactionModal(false);
     } catch (err) {
       console.log(err);
@@ -333,6 +337,8 @@ export default function App() {
       year: "numeric"
     });
   };
+
+  const fmt = (n) => Number(n).toLocaleString("es-CO");
 
   if (loading) {
     return (
@@ -524,65 +530,69 @@ export default function App() {
           <div className="space-y-6 animate-[fadeUp_0.3s_ease]">
 
             <div className="bg-gradient-to-br from-cyan-500 to-blue-700 rounded-3xl p-6 shadow-2xl">
-
-              <p className="text-sm opacity-80 mb-3">
-                Balance Total
-              </p>
-
-              <h2 className="text-5xl font-black mb-6">
-                ${balance}
-              </h2>
-
+              <p className="text-sm opacity-80 mb-3">Balance Total</p>
+              <h2 className="text-5xl font-black mb-6">${fmt(balance)}</h2>
               <button
-                onClick={() => {
-                  setSaveError("");
-                  setShowTransactionModal(true);
-                }}
+                onClick={() => { setSaveError(""); setShowTransactionModal(true); }}
                 className="bg-black/30 hover:bg-black/40 transition-all px-5 py-4 rounded-2xl font-black flex items-center gap-2"
               >
                 <Plus size={20} />
                 Nueva Transacción
               </button>
+            </div>
 
+            {/* Filtros */}
+            <div className="flex gap-2">
+              {[
+                { key: "all",     label: "Todos" },
+                { key: "income",  label: "Ingresos" },
+                { key: "expense", label: "Egresos" },
+              ].map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setFiltro(f.key)}
+                  className={`px-4 py-2 rounded-2xl text-sm font-black transition-all ${
+                    filtro === f.key
+                      ? "bg-cyan-500 text-black"
+                      : "bg-zinc-900 text-zinc-400 border border-zinc-800"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
             </div>
 
             <div className="space-y-3">
-
-              {transactions.length === 0 && (
+              {transactions.filter(tx => filtro === "all" || tx.type === filtro).length === 0 && (
                 <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-6 text-center text-zinc-500">
-                  No existen movimientos aún.
+                  No hay movimientos para mostrar.
                 </div>
               )}
 
-              {transactions.map((tx) => (
+              {transactions
+                .filter(tx => filtro === "all" || tx.type === filtro)
+                .map((tx) => (
                 <div
                   key={tx.id}
                   className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 flex items-center justify-between"
                 >
-
                   <div>
-                    <p className="font-black">
-                      {tx.category}
-                    </p>
+                    <p className="font-black">{tx.category}</p>
+                    {tx.description && (
+                      <p className="text-xs text-zinc-400 mt-0.5">{tx.description}</p>
+                    )}
                     <p className="text-xs text-zinc-500 mt-1">
                       {tx.type === "income" ? "Ingreso" : "Egreso"}
                     </p>
                     {tx.createdAt && (
-                      <p className="text-xs text-zinc-600 mt-0.5">
-                        {formatFecha(tx.createdAt)}
-                      </p>
+                      <p className="text-xs text-zinc-600 mt-0.5">{formatFecha(tx.createdAt)}</p>
                     )}
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span
-                      className={`font-black text-xl ${
-                        tx.type === "income" ? "text-cyan-400" : "text-red-400"
-                      }`}
-                    >
-                      {tx.type === "income" ? "+" : "-"}${tx.amount}
+                    <span className={`font-black text-xl ${tx.type === "income" ? "text-cyan-400" : "text-red-400"}`}>
+                      {tx.type === "income" ? "+" : "-"}${fmt(tx.amount)}
                     </span>
-
                     <button
                       onClick={() => deleteTransaction(tx.id)}
                       className="bg-red-500/10 text-red-400 p-2 rounded-xl"
@@ -590,10 +600,8 @@ export default function App() {
                       <Trash2 size={16} />
                     </button>
                   </div>
-
                 </div>
               ))}
-
             </div>
 
           </div>
@@ -641,8 +649,11 @@ export default function App() {
                     {d.paid && <span className="ml-2 text-green-500 text-xs font-black">· PAGADO</span>}
                   </p>
                   <p className={`text-sm font-black mt-1 ${d.paid ? "text-zinc-600 line-through" : d.type === "they_owe" ? "text-cyan-400" : "text-red-400"}`}>
-                    ${Number(d.amount).toLocaleString("es-CO")}
+                    ${fmt(d.amount)}
                   </p>
+                  {d.createdAt && (
+                    <p className="text-xs text-zinc-600 mt-0.5">{formatFecha(d.createdAt)}</p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -692,27 +703,21 @@ export default function App() {
                 <TrendingUp size={20} className="mx-auto text-cyan-400 mb-2" />
                 <p className="text-zinc-500 text-xs mb-1">Ingresos</p>
                 <p className="font-black text-cyan-400 text-sm">
-                  ${transactions
-                    .filter(t => t.type === "income")
-                    .reduce((a, t) => a + Number(t.amount), 0)
-                    .toLocaleString("es-CO")}
+                  ${fmt(transactions.filter(t => t.type === "income").reduce((a, t) => a + Number(t.amount), 0))}
                 </p>
               </div>
               <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-4 text-center">
                 <TrendingDown size={20} className="mx-auto text-red-400 mb-2" />
                 <p className="text-zinc-500 text-xs mb-1">Egresos</p>
                 <p className="font-black text-red-400 text-sm">
-                  ${transactions
-                    .filter(t => t.type === "expense")
-                    .reduce((a, t) => a + Number(t.amount), 0)
-                    .toLocaleString("es-CO")}
+                  ${fmt(transactions.filter(t => t.type === "expense").reduce((a, t) => a + Number(t.amount), 0))}
                 </p>
               </div>
               <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-4 text-center">
                 <BarChart3 size={20} className="mx-auto text-yellow-400 mb-2" />
                 <p className="text-zinc-500 text-xs mb-1">Balance</p>
                 <p className={`font-black text-sm ${balance >= 0 ? "text-cyan-400" : "text-red-400"}`}>
-                  ${balance.toLocaleString("es-CO")}
+                  ${fmt(balance)}
                 </p>
               </div>
             </div>
@@ -758,14 +763,10 @@ export default function App() {
                       <div key={mes} className="bg-black rounded-2xl p-4 border border-zinc-800">
                         <p className="text-zinc-400 text-sm font-black capitalize mb-3">{mes}</p>
                         <div className="flex justify-between text-sm">
-                          <span className="text-cyan-400">
-                            ↑ ${datos.ingresos.toLocaleString("es-CO")}
-                          </span>
-                          <span className="text-red-400">
-                            ↓ ${datos.egresos.toLocaleString("es-CO")}
-                          </span>
+                          <span className="text-cyan-400">↑ ${fmt(datos.ingresos)}</span>
+                          <span className="text-red-400">↓ ${fmt(datos.egresos)}</span>
                           <span className={datos.ingresos - datos.egresos >= 0 ? "text-white font-black" : "text-red-400 font-black"}>
-                            = ${(datos.ingresos - datos.egresos).toLocaleString("es-CO")}
+                            = ${fmt(datos.ingresos - datos.egresos)}
                           </span>
                         </div>
                       </div>
@@ -814,8 +815,12 @@ export default function App() {
                     "Confirmación antes de borrar deudas o transacciones",
                     "Botón Guardar se bloquea para evitar duplicados",
                     "Mensajes de error visibles al usuario",
-                    "Credenciales de Firebase protegidas",
-                    "Pestaña Configuración con log de actualizaciones",
+                    "Animación de bienvenida al iniciar sesión",
+                    "Animación de cierre de sesión",
+                    "Filtros en transacciones (todos, ingresos, egresos)",
+                    "Descripción opcional en transacciones",
+                    "Fecha visible en deudas",
+                    "Formato de miles en todos los montos ($1.200.000)",
                     "Fecha visible en cada transacción",
                     "Monto visible en tarjetas de deuda",
                     "Marcar deudas como pagadas",
@@ -850,7 +855,6 @@ export default function App() {
 
               {[
                 { icono: "📊", texto: "Gráficas visuales de ingresos vs egresos" },
-                { icono: "🏷️", texto: "Filtros por categoría y fecha" },
                 { icono: "📄", texto: "Exportar reporte PDF o Excel" },
                 { icono: "📴", texto: "Modo sin conexión (offline)" },
                 { icono: "👤", texto: "Perfil de usuario personalizable" },
@@ -980,9 +984,7 @@ export default function App() {
 
               <select
                 value={formData.category}
-                onChange={(e) =>
-                  setFormData({ ...formData, category: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
               >
                 <option value="">Selecciona una categoría</option>
@@ -1006,6 +1008,14 @@ export default function App() {
                 </optgroup>
                 <option value="Otro">Otro</option>
               </select>
+
+              <input
+                type="text"
+                placeholder="Descripción (opcional)"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+              />
 
               <button
                 onClick={addTransaction}
