@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Wallet,
@@ -8,14 +8,15 @@ import {
   Plus,
   Trash2,
   LogOut,
-  CreditCard,
   MessageCircle,
   X,
-  ChevronLeft
+  ChevronLeft,
+  Rocket,
+  CheckCircle2,
+  Clock
 } from "lucide-react";
 
 import {
-  GoogleAuthProvider,
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -213,6 +214,17 @@ export default function App() {
       setSaveError("Error al guardar. Revisa tu conexión.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const deleteTransaction = async (id) => {
+    const confirmar = window.confirm("¿Seguro que quieres eliminar esta transacción?");
+    if (!confirmar) return;
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "transactions", id));
+    } catch (err) {
+      console.log(err);
+      alert("Error al eliminar. Revisa tu conexión.");
     }
   };
 
@@ -433,21 +445,25 @@ export default function App() {
                     </p>
 
                     <p className="text-xs text-zinc-500 mt-1">
-                      {tx.type === "income"
-                        ? "Ingreso"
-                        : "Egreso"}
+                      {tx.type === "income" ? "Ingreso" : "Egreso"}
                     </p>
                   </div>
 
-                  <div
-                    className={`font-black text-xl ${
-                      tx.type === "income"
-                        ? "text-cyan-400"
-                        : "text-red-400"
-                    }`}
-                  >
-                    {tx.type === "income" ? "+" : "-"}$
-                    {tx.amount}
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`font-black text-xl ${
+                        tx.type === "income" ? "text-cyan-400" : "text-red-400"
+                      }`}
+                    >
+                      {tx.type === "income" ? "+" : "-"}${tx.amount}
+                    </span>
+
+                    <button
+                      onClick={() => deleteTransaction(tx.id)}
+                      className="bg-red-500/10 text-red-400 p-2 rounded-xl"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
 
                 </div>
@@ -569,6 +585,111 @@ export default function App() {
               </div>
 
             </div>
+
+          </div>
+        )}
+
+        {activeTab === "settings" && (
+          <div className="space-y-6 animate-[fadeUp_0.3s_ease]">
+
+            <h2 className="text-3xl font-black">Configuración</h2>
+
+            {/* Info del usuario */}
+            <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5">
+              <p className="text-zinc-500 text-xs uppercase tracking-widest mb-1">Cuenta</p>
+              <p className="font-black text-lg truncate">{user.email}</p>
+              <button
+                onClick={() => signOut(auth)}
+                className="mt-4 flex items-center gap-2 bg-red-500/10 text-red-400 px-4 py-3 rounded-2xl font-black text-sm"
+              >
+                <LogOut size={16} />
+                Cerrar sesión
+              </button>
+            </div>
+
+            {/* Novedades */}
+            <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 size={20} className="text-cyan-400" />
+                <h3 className="font-black text-lg">Novedades</h3>
+              </div>
+
+              {[
+                {
+                  version: "v1.2",
+                  fecha: "Mayo 2025",
+                  cambios: [
+                    "Botón para eliminar transacciones equivocadas",
+                    "Pestaña Configuración con log de actualizaciones",
+                    "Confirmación antes de borrar deudas",
+                    "Botón Guardar se bloquea para evitar duplicados",
+                    "Mensajes de error visibles al usuario",
+                  ],
+                },
+                {
+                  version: "v1.1",
+                  fecha: "Mayo 2025",
+                  cambios: [
+                    "Credenciales de Firebase protegidas",
+                    "Listeners de Firestore sin memory leaks",
+                    "Hora de transacciones desde el servidor",
+                    "Validación de montos negativos o cero",
+                  ],
+                },
+                {
+                  version: "v1.0",
+                  fecha: "Abril 2025",
+                  cambios: [
+                    "Lanzamiento inicial de FinanzApp",
+                    "Login con Google y correo/contraseña",
+                    "Registro de ingresos y egresos",
+                    "Gestión de deudas con recordatorio por WhatsApp",
+                  ],
+                },
+              ].map((release) => (
+                <div key={release.version} className="bg-black rounded-2xl p-4 border border-zinc-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-cyan-400 font-black">{release.version}</span>
+                    <span className="text-zinc-600 text-xs">{release.fecha}</span>
+                  </div>
+                  <ul className="space-y-1">
+                    {release.cambios.map((c, i) => (
+                      <li key={i} className="text-zinc-400 text-sm flex items-start gap-2">
+                        <span className="text-cyan-500 mt-0.5">•</span>
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            {/* Próximamente */}
+            <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 space-y-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Rocket size={20} className="text-yellow-400" />
+                <h3 className="font-black text-lg">Próximamente</h3>
+              </div>
+
+              {[
+                { icono: "📊", texto: "Gráficas de ingresos vs egresos por mes" },
+                { icono: "🏷️", texto: "Filtros por categoría y fecha" },
+                { icono: "✅", texto: "Marcar deudas como pagadas" },
+                { icono: "📴", texto: "Modo sin conexión (offline)" },
+                { icono: "👤", texto: "Perfil de usuario personalizable" },
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-3 bg-black rounded-2xl p-4 border border-zinc-800">
+                  <span className="text-xl">{item.icono}</span>
+                  <p className="text-zinc-400 text-sm">{item.texto}</p>
+                  <Clock size={14} className="ml-auto text-zinc-600 shrink-0" />
+                </div>
+              ))}
+            </div>
+
+            {/* Versión */}
+            <p className="text-center text-zinc-700 text-xs pb-2">
+              FinanzApp v1.2 · DEV Zaack
+            </p>
 
           </div>
         )}
