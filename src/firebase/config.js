@@ -2,7 +2,9 @@
 
 import {
   getAuth,
-  GoogleAuthProvider
+  GoogleAuthProvider,
+  browserLocalPersistence,
+  setPersistence
 } from "firebase/auth";
 
 import {
@@ -22,6 +24,13 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
+// Sesión permanente — el usuario no necesita volver a iniciar sesión
+// aunque cierre el navegador, reinicie el celular o pase tiempo sin usar la app
+setPersistence(auth, browserLocalPersistence);
+
 export const db = getFirestore(app);
 
 export const googleProvider = new GoogleAuthProvider();
+
+// Fuerza que Google muestre la cuenta ya usada sin pedir elegir de nuevo
+googleProvider.setCustomParameters({ prompt: "select_account" });
