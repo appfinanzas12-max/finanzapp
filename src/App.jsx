@@ -66,6 +66,11 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+  // "login" muestra animación de bienvenida, "logout" muestra animación de cierre
+  const [splashMode, setSplashMode] = useState(null);
+  const [splashStep, setSplashStep] = useState(0);
+  const [splashDone, setSplashDone] = useState(false);
+
   const [formData, setFormData] = useState({
     type: "income",
     amount: "",
@@ -79,12 +84,52 @@ export default function App() {
     type: "they_owe"
   });
 
+  const SPLASH_LOGIN = [
+    "Identidad confirmada",
+    "Sesión iniciada",
+    "Conectando con la nube",
+    "Sincronizando tu información",
+    "Cargando transacciones y deudas",
+    "Preparando tu balance",
+    "FinanzApp lista",
+  ];
+
+  const SPLASH_LOGOUT = [
+    "Cerrando tu sesión",
+    "Guardando tu información",
+    "Sincronizando",
+    "Todo se guardó exitosamente",
+  ];
+
+  // Avanza los pasos de la animación uno por uno
+  useEffect(() => {
+    if (!splashMode) return;
+    const pasos = splashMode === "login" ? SPLASH_LOGIN : SPLASH_LOGOUT;
+    const intervalo = splashMode === "login" ? 320 : 260;
+
+    if (splashStep < pasos.length) {
+      const t = setTimeout(() => setSplashStep((s) => s + 1), intervalo);
+      return () => clearTimeout(t);
+    } else {
+      // Todos los pasos completados — espera un momento y cierra el splash
+      const t = setTimeout(() => {
+        setSplashDone(true);
+        setTimeout(() => {
+          setSplashMode(null);
+          setSplashStep(0);
+          setSplashDone(false);
+          if (splashMode === "logout") signOut(auth);
+        }, 900);
+      }, 500);
+      return () => clearTimeout(t);
+    }
+  }, [splashMode, splashStep]);
+
   useEffect(() => {
     let unsubTx = null;
     let unsubDebts = null;
 
     const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
       setLoading(false);
 
       if (!u) {
@@ -92,8 +137,19 @@ export default function App() {
         if (unsubDebts) unsubDebts();
         setTransactions([]);
         setDebts([]);
+        setUser(null);
         return;
       }
+
+      // Dispara animación de bienvenida solo si no hay usuario previo
+      setUser((prev) => {
+        if (!prev) {
+          setSplashStep(0);
+          setSplashDone(false);
+          setSplashMode("login");
+        }
+        return u;
+      });
 
       const txRef = query(
         collection(db, "users", u.uid, "transactions"),
@@ -262,6 +318,12 @@ export default function App() {
     );
   };
 
+  const handleLogout = () => {
+    setSplashStep(0);
+    setSplashDone(false);
+    setSplashMode("logout");
+  };
+
   const formatFecha = (ts) => {
     if (!ts) return "";
     const fecha = ts.toDate ? ts.toDate() : new Date(ts);
@@ -276,6 +338,82 @@ export default function App() {
     return (
       <div className="min-h-screen bg-black text-cyan-400 flex items-center justify-center text-2xl font-black">
         Cargando FinanzApp...
+      </div>
+    );
+  }
+
+  // Animación de bienvenida al iniciar sesión
+  if (splashMode === "login") {
+    const pasos = SPLASH_LOGIN;
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-8">
+        <h1 className="text-4xl font-black text-cyan-400 mb-12 tracking-tight">
+          FinanzApp
+        </h1>
+        <div className="w-full max-w-xs space-y-4">
+          {pasos.map((paso, i) => {
+            const visible = i < splashStep;
+            return (
+              <div
+                key={i}
+                className={`flex items-center gap-3 transition-all duration-300 ${
+                  visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+                }`}
+              >
+                <span className={`text-lg transition-all duration-200 ${visible ? "scale-100" : "scale-0"}`}>
+                  ✅
+                </span>
+                <span className={`font-black text-sm ${visible ? "text-white" : "text-zinc-700"}`}>
+                  {paso}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        {splashDone && (
+          <div className="mt-12 text-center animate-[fadeUp_0.5s_ease]">
+            <p className="text-2xl font-black text-white">Bienvenido de vuelta 👋</p>
+            <p className="text-zinc-500 text-sm mt-2">{user?.email}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Animación de cierre de sesión
+  if (splashMode === "logout") {
+    const pasos = SPLASH_LOGOUT;
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-8">
+        <h1 className="text-4xl font-black text-cyan-400 mb-12 tracking-tight">
+          FinanzApp
+        </h1>
+        <div className="w-full max-w-xs space-y-4">
+          {pasos.map((paso, i) => {
+            const visible = i < splashStep;
+            return (
+              <div
+                key={i}
+                className={`flex items-center gap-3 transition-all duration-300 ${
+                  visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+                }`}
+              >
+                <span className={`text-lg transition-all duration-200 ${visible ? "scale-100" : "scale-0"}`}>
+                  ✅
+                </span>
+                <span className={`font-black text-sm ${visible ? "text-white" : "text-zinc-700"}`}>
+                  {paso}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        {splashDone && (
+          <div className="mt-12 text-center animate-[fadeUp_0.5s_ease]">
+            <p className="text-2xl font-black text-white">Hasta luego 👋</p>
+            <p className="text-zinc-500 text-sm mt-2">{user?.email}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -372,7 +510,7 @@ export default function App() {
         </div>
 
         <button
-          onClick={() => signOut(auth)}
+          onClick={handleLogout}
           className="bg-red-500/10 text-red-400 p-3 rounded-2xl"
         >
           <LogOut size={20} />
@@ -649,7 +787,7 @@ export default function App() {
               <p className="text-zinc-500 text-xs uppercase tracking-widest mb-1">Cuenta</p>
               <p className="font-black text-lg truncate">{user.email}</p>
               <button
-                onClick={() => signOut(auth)}
+                onClick={handleLogout}
                 className="mt-4 flex items-center gap-2 bg-red-500/10 text-red-400 px-4 py-3 rounded-2xl font-black text-sm"
               >
                 <LogOut size={16} />
