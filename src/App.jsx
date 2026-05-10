@@ -13,7 +13,10 @@ import {
   ChevronLeft,
   Rocket,
   CheckCircle2,
-  Clock
+  Clock,
+  Check,
+  TrendingUp,
+  TrendingDown
 } from "lucide-react";
 
 import {
@@ -29,6 +32,7 @@ import {
   addDoc,
   deleteDoc,
   doc,
+  updateDoc,
   onSnapshot,
   query,
   orderBy,
@@ -239,6 +243,17 @@ export default function App() {
     }
   };
 
+  const toggleDebtPaid = async (id, currentPaid) => {
+    try {
+      await updateDoc(doc(db, "users", user.uid, "debts", id), {
+        paid: !currentPaid
+      });
+    } catch (err) {
+      console.log(err);
+      alert("Error al actualizar. Revisa tu conexión.");
+    }
+  };
+
   const sendWhatsApp = (mode) => {
     if (!selectedDebt) return;
 
@@ -259,6 +274,17 @@ export default function App() {
     window.open(
       `https://wa.me/${selectedDebt.phone}?text=${encodeURIComponent(msg)}`
     );
+  };
+
+  // Convierte el timestamp de Firestore a texto legible: "12 mayo 2025"
+  const formatFecha = (ts) => {
+    if (!ts) return "";
+    const fecha = ts.toDate ? ts.toDate() : new Date(ts);
+    return fecha.toLocaleDateString("es-CO", {
+      day: "numeric",
+      month: "long",
+      year: "numeric"
+    });
   };
 
   if (loading) {
@@ -443,10 +469,14 @@ export default function App() {
                     <p className="font-black">
                       {tx.category}
                     </p>
-
                     <p className="text-xs text-zinc-500 mt-1">
                       {tx.type === "income" ? "Ingreso" : "Egreso"}
                     </p>
+                    {tx.createdAt && (
+                      <p className="text-xs text-zinc-600 mt-0.5">
+                        {formatFecha(tx.createdAt)}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -504,32 +534,43 @@ export default function App() {
             {debts.map((d) => (
               <div
                 key={d.id}
-                className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 flex items-center justify-between"
+                className={`bg-zinc-950 border rounded-3xl p-5 flex items-center justify-between ${d.paid ? "border-zinc-800 opacity-60" : "border-zinc-900"}`}
               >
 
                 <div>
-                  <p className="font-black text-xl">
+                  <p className={`font-black text-xl ${d.paid ? "line-through text-zinc-500" : ""}`}>
                     {d.name}
                   </p>
-
                   <p className="text-zinc-500 text-sm mt-1">
-                    {d.type === "they_owe"
-                      ? "Te deben"
-                      : "Debes"}
+                    {d.type === "they_owe" ? "Te deben" : "Debes"}
+                    {d.paid && <span className="ml-2 text-green-500 text-xs font-black">· PAGADO</span>}
+                  </p>
+                  <p className={`text-sm font-black mt-1 ${d.paid ? "text-zinc-600 line-through" : d.type === "they_owe" ? "text-cyan-400" : "text-red-400"}`}>
+                    ${Number(d.amount).toLocaleString("es-CO")}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2">
 
                   <button
-                    onClick={() => {
-                      setSelectedDebt(d);
-                      setShowReminderModal(true);
-                    }}
-                    className="bg-green-500/10 text-green-400 p-3 rounded-2xl"
+                    onClick={() => toggleDebtPaid(d.id, d.paid)}
+                    className={`p-3 rounded-2xl ${d.paid ? "bg-green-500/20 text-green-400" : "bg-zinc-800 text-zinc-400"}`}
+                    title={d.paid ? "Marcar como pendiente" : "Marcar como pagada"}
                   >
-                    <MessageCircle size={18} />
+                    <Check size={18} />
                   </button>
+
+                  {!d.paid && (
+                    <button
+                      onClick={() => {
+                        setSelectedDebt(d);
+                        setShowReminderModal(true);
+                      }}
+                      className="bg-green-500/10 text-green-400 p-3 rounded-2xl"
+                    >
+                      <MessageCircle size={18} />
+                    </button>
+                  )}
 
                   <button
                     onClick={() => deleteDebt(d.id)}
@@ -547,43 +588,100 @@ export default function App() {
         )}
 
         {activeTab === "analytics" && (
-          <div className="animate-[fadeUp_0.3s_ease]">
+          <div className="space-y-5 animate-[fadeUp_0.3s_ease]">
 
-            <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-8 text-center">
+            <h2 className="text-3xl font-black">Analytics</h2>
 
-              <BarChart3
-                size={60}
-                className="mx-auto text-cyan-400 mb-5"
-              />
-
-              <h2 className="text-3xl font-black mb-4">
-                Analytics
-              </h2>
-
-              <div className="space-y-4 text-left mt-8">
-
-                <div className="bg-black rounded-2xl p-4 border border-zinc-800">
-                  <p className="text-zinc-500 text-sm">
-                    Transacciones
-                  </p>
-
-                  <h3 className="text-3xl font-black mt-2">
-                    {transactions.length}
-                  </h3>
-                </div>
-
-                <div className="bg-black rounded-2xl p-4 border border-zinc-800">
-                  <p className="text-zinc-500 text-sm">
-                    Deudas registradas
-                  </p>
-
-                  <h3 className="text-3xl font-black mt-2">
-                    {debts.length}
-                  </h3>
-                </div>
-
+            {/* Tarjetas de totales */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-4 text-center">
+                <TrendingUp size={20} className="mx-auto text-cyan-400 mb-2" />
+                <p className="text-zinc-500 text-xs mb-1">Ingresos</p>
+                <p className="font-black text-cyan-400 text-sm">
+                  ${transactions
+                    .filter(t => t.type === "income")
+                    .reduce((a, t) => a + Number(t.amount), 0)
+                    .toLocaleString("es-CO")}
+                </p>
               </div>
+              <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-4 text-center">
+                <TrendingDown size={20} className="mx-auto text-red-400 mb-2" />
+                <p className="text-zinc-500 text-xs mb-1">Egresos</p>
+                <p className="font-black text-red-400 text-sm">
+                  ${transactions
+                    .filter(t => t.type === "expense")
+                    .reduce((a, t) => a + Number(t.amount), 0)
+                    .toLocaleString("es-CO")}
+                </p>
+              </div>
+              <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-4 text-center">
+                <BarChart3 size={20} className="mx-auto text-yellow-400 mb-2" />
+                <p className="text-zinc-500 text-xs mb-1">Balance</p>
+                <p className={`font-black text-sm ${balance >= 0 ? "text-cyan-400" : "text-red-400"}`}>
+                  ${balance.toLocaleString("es-CO")}
+                </p>
+              </div>
+            </div>
 
+            {/* Contadores */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-4">
+                <p className="text-zinc-500 text-xs">Transacciones</p>
+                <h3 className="text-3xl font-black mt-1">{transactions.length}</h3>
+              </div>
+              <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-4">
+                <p className="text-zinc-500 text-xs">Deudas activas</p>
+                <h3 className="text-3xl font-black mt-1">
+                  {debts.filter(d => !d.paid).length}
+                </h3>
+              </div>
+            </div>
+
+            {/* Resumen mensual */}
+            <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5">
+              <h3 className="font-black text-lg mb-4">Resumen por mes</h3>
+              {(() => {
+                // Agrupa transacciones por mes
+                const porMes = {};
+                transactions.forEach(tx => {
+                  if (!tx.createdAt) return;
+                  const fecha = tx.createdAt.toDate ? tx.createdAt.toDate() : new Date(tx.createdAt);
+                  const clave = fecha.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+                  if (!porMes[clave]) porMes[clave] = { ingresos: 0, egresos: 0 };
+                  if (tx.type === "income") porMes[clave].ingresos += Number(tx.amount);
+                  else porMes[clave].egresos += Number(tx.amount);
+                });
+
+                const meses = Object.entries(porMes);
+                if (meses.length === 0) {
+                  return (
+                    <p className="text-zinc-600 text-sm text-center py-4">
+                      Aún no hay datos suficientes para el resumen mensual.
+                    </p>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {meses.map(([mes, datos]) => (
+                      <div key={mes} className="bg-black rounded-2xl p-4 border border-zinc-800">
+                        <p className="text-zinc-400 text-sm font-black capitalize mb-3">{mes}</p>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-cyan-400">
+                            ↑ ${datos.ingresos.toLocaleString("es-CO")}
+                          </span>
+                          <span className="text-red-400">
+                            ↓ ${datos.egresos.toLocaleString("es-CO")}
+                          </span>
+                          <span className={datos.ingresos - datos.egresos >= 0 ? "text-white font-black" : "text-red-400 font-black"}>
+                            = ${(datos.ingresos - datos.egresos).toLocaleString("es-CO")}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
           </div>
@@ -629,6 +727,12 @@ export default function App() {
                     "Mensajes de error visibles al usuario",
                     "Credenciales de Firebase protegidas",
                     "Pestaña Configuración con log de actualizaciones",
+                    "Fecha visible en cada transacción",
+                    "Monto visible en tarjetas de deuda",
+                    "Marcar deudas como pagadas",
+                    "Analytics con totales reales de ingresos y egresos",
+                    "Resumen mensual de movimientos",
+                    "Categorías predefinidas al registrar transacciones",
                   ],
                 },
               ].map((release) => (
@@ -657,11 +761,12 @@ export default function App() {
               </div>
 
               {[
-                { icono: "📊", texto: "Gráficas de ingresos vs egresos por mes" },
+                { icono: "📊", texto: "Gráficas visuales de ingresos vs egresos" },
                 { icono: "🏷️", texto: "Filtros por categoría y fecha" },
-                { icono: "✅", texto: "Marcar deudas como pagadas" },
+                { icono: "📄", texto: "Exportar reporte PDF o Excel" },
                 { icono: "📴", texto: "Modo sin conexión (offline)" },
                 { icono: "👤", texto: "Perfil de usuario personalizable" },
+                { icono: "💎", texto: "Plan Premium con funciones avanzadas" },
               ].map((item, i) => (
                 <div key={i} className="flex items-center gap-3 bg-black rounded-2xl p-4 border border-zinc-800">
                   <span className="text-xl">{item.icono}</span>
@@ -785,15 +890,34 @@ export default function App() {
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
               />
 
-              <input
-                type="text"
-                placeholder="Categoría"
+              <select
                 value={formData.category}
                 onChange={(e) =>
                   setFormData({ ...formData, category: e.target.value })
                 }
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
-              />
+              >
+                <option value="">Selecciona una categoría</option>
+                <optgroup label="Ingresos">
+                  <option value="Salario">Salario</option>
+                  <option value="Freelance">Freelance</option>
+                  <option value="Negocio">Negocio</option>
+                  <option value="Inversión">Inversión</option>
+                  <option value="Regalo">Regalo</option>
+                </optgroup>
+                <optgroup label="Gastos">
+                  <option value="Arriendo">Arriendo</option>
+                  <option value="Comida">Comida</option>
+                  <option value="Transporte">Transporte</option>
+                  <option value="Salud">Salud</option>
+                  <option value="Educación">Educación</option>
+                  <option value="Entretenimiento">Entretenimiento</option>
+                  <option value="Servicios">Servicios (agua, luz, internet)</option>
+                  <option value="Ropa">Ropa</option>
+                  <option value="Deuda">Pago de deuda</option>
+                </optgroup>
+                <option value="Otro">Otro</option>
+              </select>
 
               <button
                 onClick={addTransaction}
