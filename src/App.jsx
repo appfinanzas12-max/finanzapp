@@ -1,363 +1,385 @@
-import React, { useEffect, useState } from "react";
-
+import { useEffect, useState } from 'react'
 import {
+  GoogleAuthProvider,
   signInWithPopup,
-  onAuthStateChanged,
   signOut,
-} from "firebase/auth";
+  onAuthStateChanged,
+} from 'firebase/auth'
 
-import {
-  auth,
-  provider,
-} from "./firebase";
-
-function Card({ children, className = "" }) {
-  return (
-    <div
-      className={`bg-zinc-900 border border-zinc-800 rounded-3xl p-6 ${className}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function NavButton({ icon, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl transition-all ${
-        active
-          ? "bg-blue-600 text-white"
-          : "bg-zinc-900 text-zinc-400"
-      }`}
-    >
-      {icon}
-    </button>
-  );
-}
+import { auth } from './firebase'
 
 export default function App() {
+  const [user, setUser] = useState(null)
+  const [showModal, setShowModal] = useState(false)
+  const [transactions, setTransactions] = useState([])
 
-  const [user, setUser] = useState(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    amount: '',
+    type: 'ingreso',
+  })
 
-  const [activeTab, setActiveTab] = useState("wallet");
-
-  const transactions = [];
-
-  const debts = [];
-
-  const totalIncome = 0;
-
-  const totalExpense = 0;
-
-  const balance = 0;
-
-  // LOGIN GOOGLE REAL
-  const loginGoogle = async () => {
-
-    try {
-
-      await signInWithPopup(
-        auth,
-        provider
-      );
-
-    } catch (error) {
-
-      console.log(error);
-
-      alert("Error iniciando sesión");
-
-    }
-  };
-
-  // DETECTAR SESIÓN
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser)
+    })
 
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (currentUser) => {
+    return () => unsubscribe()
+  }, [])
 
-        setUser(currentUser);
-
-      }
-    );
-
-    return () => unsubscribe();
-
-  }, []);
-
-  // LOGOUT
-  const logout = async () => {
-
-    await signOut(auth);
-
-  };
-
-  // LOGIN SCREEN
-  if (!user) {
-
-    return (
-
-      <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
-
-        <Card className="w-full max-w-sm text-center">
-
-          <h1 className="text-4xl font-black italic mb-2">
-            FinanzApp
-          </h1>
-
-          <p className="text-xs tracking-[6px] text-zinc-500 mb-8 font-bold">
-            ZAACK EDITION V2
-          </p>
-
-          <div className="space-y-4">
-
-            <input
-              type="email"
-              placeholder="Correo electrónico"
-              className="w-full p-4 rounded-2xl bg-zinc-800 outline-none"
-            />
-
-            <input
-              type="password"
-              placeholder="Contraseña"
-              className="w-full p-4 rounded-2xl bg-zinc-800 outline-none"
-            />
-
-            <button
-              className="w-full bg-blue-600 p-4 rounded-2xl font-black"
-            >
-              Iniciar Sesión
-            </button>
-
-            <button
-              onClick={loginGoogle}
-              className="w-full border border-zinc-700 p-4 rounded-2xl font-black"
-            >
-              Continuar con Google
-            </button>
-
-          </div>
-
-        </Card>
-
-      </div>
-    );
+  const loginGoogle = async () => {
+    try {
+      const provider = new GoogleAuthProvider()
+      await signInWithPopup(auth, provider)
+    } catch (error) {
+      console.log(error)
+      alert('Error iniciando sesión')
+    }
   }
 
-  // DASHBOARD
+  const logout = async () => {
+    await signOut(auth)
+  }
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    })
+  }
+
+  const addTransaction = () => {
+    if (!formData.title || !formData.amount) {
+      alert('Completa todos los campos')
+      return
+    }
+
+    const newTransaction = {
+      id: Date.now(),
+      title: formData.title,
+      amount: Number(formData.amount),
+      type: formData.type,
+      date: new Date().toLocaleDateString(),
+    }
+
+    setTransactions([newTransaction, ...transactions])
+
+    setFormData({
+      title: '',
+      amount: '',
+      type: 'ingreso',
+    })
+
+    setShowModal(false)
+  }
+
+  const ingresos = transactions
+    .filter((t) => t.type === 'ingreso')
+    .reduce((acc, item) => acc + item.amount, 0)
+
+  const gastos = transactions
+    .filter((t) => t.type === 'gasto')
+    .reduce((acc, item) => acc + item.amount, 0)
+
+  const balance = ingresos - gastos
+
+  if (!user) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: '#000',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          color: '#fff',
+          flexDirection: 'column',
+          fontFamily: 'Arial',
+        }}
+      >
+        <h1 style={{ fontSize: '50px', marginBottom: '10px' }}>
+          FinanzApp
+        </h1>
+
+        <p style={{ marginBottom: '30px', opacity: 0.7 }}>
+          Controla tus finanzas personales
+        </p>
+
+        <button
+          onClick={loginGoogle}
+          style={{
+            padding: '15px 25px',
+            borderRadius: '12px',
+            border: 'none',
+            background: '#2563eb',
+            color: '#fff',
+            fontSize: '16px',
+            cursor: 'pointer',
+          }}
+        >
+          Iniciar sesión con Google
+        </button>
+      </div>
+    )
+  }
+
   return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: '#000',
+        color: '#fff',
+        padding: '20px',
+        fontFamily: 'Arial',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: '450px',
+          margin: '0 auto',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '20px',
+          }}
+        >
+          <div>
+            <h1 style={{ margin: 0 }}>FinanzApp</h1>
+            <small>{user.email}</small>
+          </div>
 
-    <div className="min-h-screen bg-black text-white pb-28">
+          <button
+            onClick={logout}
+            style={{
+              padding: '10px',
+              borderRadius: '10px',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            Salir
+          </button>
+        </div>
 
-      <header className="max-w-md mx-auto p-6 flex justify-between items-center">
+        <div
+          style={{
+            background: '#111',
+            borderRadius: '20px',
+            padding: '20px',
+            marginBottom: '20px',
+          }}
+        >
+          <h3>Balance Total</h3>
 
-        <div>
-
-          <h1 className="text-4xl font-black italic">
-            FinanzApp
+          <h1>
+            ${balance.toLocaleString('es-CO')}
           </h1>
 
-          <p className="text-xs tracking-[6px] text-zinc-500 font-bold">
-            ZAACK EDITION V2
-          </p>
-
-        </div>
-
-        <div className="text-right">
-
-          <p className="text-sm font-bold">
-            {user.displayName}
-          </p>
-
-          <p className="text-xs text-zinc-500">
-            {user.email}
-          </p>
-
-        </div>
-
-      </header>
-
-      <main className="max-w-md mx-auto px-6 space-y-6">
-
-        {activeTab === "wallet" && (
-
-          <>
-
-            <Card>
-
-              <p className="text-zinc-500 font-bold text-sm uppercase mb-3">
-                Balance Total
-              </p>
-
-              <h2 className="text-5xl font-black mb-8">
-                ${balance.toLocaleString("es-CO")}
-              </h2>
-
-              <div className="grid grid-cols-2 gap-4 mb-6">
-
-                <div className="bg-zinc-950 rounded-2xl p-4">
-
-                  <p className="text-zinc-500 text-sm mb-2">
-                    Ingresos
-                  </p>
-
-                  <h3 className="text-2xl font-black text-blue-500">
-                    ${totalIncome.toLocaleString("es-CO")}
-                  </h3>
-
-                </div>
-
-                <div className="bg-zinc-950 rounded-2xl p-4">
-
-                  <p className="text-zinc-500 text-sm mb-2">
-                    Gastos
-                  </p>
-
-                  <h3 className="text-2xl font-black text-red-500">
-                    ${totalExpense.toLocaleString("es-CO")}
-                  </h3>
-
-                </div>
-
-              </div>
-
-              <button className="w-full bg-blue-600 rounded-2xl p-5 font-black text-lg">
-                ➕ NUEVA TRANSACCIÓN
-              </button>
-
-            </Card>
-
-            <div>
-
-              <div className="flex justify-between items-center mb-4">
-
-                <h2 className="text-2xl font-black">
-                  Movimientos
-                </h2>
-
-                <span className="text-zinc-500 text-sm">
-                  {transactions.length} registros
-                </span>
-
-              </div>
-
-              {transactions.length === 0 && (
-
-                <Card className="text-center py-10">
-
-                  <p className="text-zinc-500">
-                    No hay movimientos registrados.
-                  </p>
-
-                </Card>
-
-              )}
-
-            </div>
-
-          </>
-        )}
-
-        {activeTab === "debts" && (
-
-          <div>
-
-            <div className="flex justify-between items-center mb-4">
-
-              <h2 className="text-2xl font-black">
-                Deudores
-              </h2>
-
-              <button className="bg-blue-600 rounded-2xl px-5 py-3 font-black">
-                ➕
-              </button>
-
-            </div>
-
-            {debts.length === 0 && (
-
-              <Card className="text-center py-10">
-
-                <p className="text-zinc-500">
-                  No tienes deudas registradas.
-                </p>
-
-              </Card>
-
-            )}
-
-          </div>
-        )}
-
-        {activeTab === "stats" && (
-
-          <Card className="text-center py-20">
-
-            <h2 className="text-2xl font-black mb-3">
-              Estadísticas
-            </h2>
-
-            <p className="text-zinc-500">
-              Próximamente disponible.
-            </p>
-
-          </Card>
-        )}
-
-        {activeTab === "settings" && (
-
-          <Card className="space-y-4">
-
-            <h2 className="text-2xl font-black">
-              Configuración
-            </h2>
-
-            <button
-              onClick={logout}
-              className="w-full bg-red-600 p-4 rounded-2xl font-black"
+          <div
+            style={{
+              display: 'flex',
+              gap: '10px',
+              marginTop: '20px',
+            }}
+          >
+            <div
+              style={{
+                flex: 1,
+                background: '#1a1a1a',
+                padding: '15px',
+                borderRadius: '15px',
+              }}
             >
-              Cerrar sesión
-            </button>
+              <p>Ingresos</p>
+              <h3>
+                ${ingresos.toLocaleString('es-CO')}
+              </h3>
+            </div>
 
-          </Card>
-        )}
+            <div
+              style={{
+                flex: 1,
+                background: '#1a1a1a',
+                padding: '15px',
+                borderRadius: '15px',
+              }}
+            >
+              <p>Gastos</p>
+              <h3>
+                ${gastos.toLocaleString('es-CO')}
+              </h3>
+            </div>
+          </div>
 
-      </main>
-
-      <nav className="fixed bottom-0 left-0 right-0 bg-black border-t border-zinc-800 p-4">
-
-        <div className="max-w-md mx-auto flex justify-between">
-
-          <NavButton
-            icon="💳"
-            active={activeTab === "wallet"}
-            onClick={() => setActiveTab("wallet")}
-          />
-
-          <NavButton
-            icon="👥"
-            active={activeTab === "debts"}
-            onClick={() => setActiveTab("debts")}
-          />
-
-          <NavButton
-            icon="📊"
-            active={activeTab === "stats"}
-            onClick={() => setActiveTab("stats")}
-          />
-
-          <NavButton
-            icon="⚙️"
-            active={activeTab === "settings"}
-            onClick={() => setActiveTab("settings")}
-          />
-
+          <button
+            onClick={() => setShowModal(true)}
+            style={{
+              width: '100%',
+              marginTop: '20px',
+              padding: '15px',
+              borderRadius: '15px',
+              border: 'none',
+              background: '#2563eb',
+              color: '#fff',
+              fontSize: '16px',
+              cursor: 'pointer',
+            }}
+          >
+            + Nueva Transacción
+          </button>
         </div>
 
-      </nav>
+        <div>
+          <h2>Movimientos</h2>
 
+          {transactions.length === 0 ? (
+            <div
+              style={{
+                background: '#111',
+                padding: '20px',
+                borderRadius: '15px',
+                opacity: 0.7,
+              }}
+            >
+              No hay movimientos todavía
+            </div>
+          ) : (
+            transactions.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  background: '#111',
+                  padding: '15px',
+                  borderRadius: '15px',
+                  marginBottom: '10px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.date}</p>
+                </div>
+
+                <strong>
+                  {item.type === 'gasto' ? '-' : '+'}$
+                  {item.amount.toLocaleString('es-CO')}
+                </strong>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {showModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <div
+            style={{
+              background: '#111',
+              padding: '20px',
+              borderRadius: '20px',
+              width: '90%',
+              maxWidth: '400px',
+            }}
+          >
+            <h2>Nueva Transacción</h2>
+
+            <input
+              type='text'
+              name='title'
+              placeholder='Descripción'
+              value={formData.title}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '12px',
+                marginTop: '15px',
+                borderRadius: '10px',
+                border: 'none',
+              }}
+            />
+
+            <input
+              type='number'
+              name='amount'
+              placeholder='Valor'
+              value={formData.amount}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '12px',
+                marginTop: '15px',
+                borderRadius: '10px',
+                border: 'none',
+              }}
+            />
+
+            <select
+              name='type'
+              value={formData.type}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                padding: '12px',
+                marginTop: '15px',
+                borderRadius: '10px',
+              }}
+            >
+              <option value='ingreso'>Ingreso</option>
+              <option value='gasto'>Gasto</option>
+            </select>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '10px',
+                marginTop: '20px',
+              }}
+            >
+              <button
+                onClick={addTransaction}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  border: 'none',
+                  borderRadius: '10px',
+                  background: '#2563eb',
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                Guardar
+              </button>
+
+              <button
+                onClick={() => setShowModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  border: 'none',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  );
+  )
 }
