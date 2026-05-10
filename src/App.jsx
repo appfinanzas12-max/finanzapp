@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from "react";
+
 import {
   Wallet,
   Users,
@@ -9,538 +10,822 @@ import {
   LogOut,
   CreditCard,
   MessageCircle,
-} from 'lucide-react'
+  X,
+  ChevronLeft
+} from "lucide-react";
 
 import {
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut,
-  onAuthStateChanged,
-} from 'firebase/auth'
+  onAuthStateChanged
+} from "firebase/auth";
 
-import { auth } from './firebase'
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  query,
+  orderBy
+} from "firebase/firestore";
 
-const Card = ({ children, className = '' }) => (
-  <div className={`bg-zinc-950 border border-cyan-500/20 rounded-3xl p-5 shadow-2xl shadow-cyan-500/10 ${className}`}>
-    {children}
-  </div>
-)
-
-const NavBtn = ({ icon, active, onClick }) => (
-  <button
-    onClick={onClick}
-    className={`p-4 rounded-2xl transition-all duration-300 ${
-      active
-        ? 'bg-cyan-400 text-black shadow-lg shadow-cyan-400/40'
-        : 'text-zinc-500'
-    }`}
-  >
-    {icon}
-  </button>
-)
-
-function Modal({ children }) {
-  return (
-    <div className='fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50'>
-      <div className='w-full max-w-sm bg-zinc-950 border border-cyan-500/20 rounded-3xl p-6'>
-        {children}
-      </div>
-    </div>
-  )
-}
+import { auth, provider, db } from "./firebase";
 
 export default function App() {
-  const [user, setUser] = useState(null)
-  const [activeTab, setActiveTab] = useState('wallet')
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const [transactions, setTransactions] = useState([])
-  const [debts, setDebts] = useState([])
-  const [ownDebts, setOwnDebts] = useState([])
+  const [transactions, setTransactions] = useState([]);
+  const [debts, setDebts] = useState([]);
 
-  const [showTxModal, setShowTxModal] = useState(false)
-  const [showDebtModal, setShowDebtModal] = useState(false)
-  const [showOwnDebtModal, setShowOwnDebtModal] = useState(false)
+  const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [showDebtModal, setShowDebtModal] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
 
-  const [selectedDebt, setSelectedDebt] = useState(null)
+  const [selectedDebt, setSelectedDebt] = useState(null);
 
-  const [txData, setTxData] = useState({
-    type: 'income',
-    category: '',
-    amount: '',
-  })
+  const [activeTab, setActiveTab] = useState("wallet");
+
+  const [isRegister, setIsRegister] = useState(false);
+
+  const [error, setError] = useState("");
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [formData, setFormData] = useState({
+    type: "income",
+    amount: "",
+    category: ""
+  });
 
   const [debtData, setDebtData] = useState({
-    name: '',
-    amount: '',
-  })
+    name: "",
+    amount: "",
+    phone: "",
+    type: "they_owe"
+  });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u)
-    })
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
 
-    return () => unsubscribe()
-  }, [])
+      if (!u) return;
+
+      const txRef = query(
+        collection(db, "users", u.uid, "transactions"),
+        orderBy("createdAt", "desc")
+      );
+
+      const debtRef = query(
+        collection(db, "users", u.uid, "debts"),
+        orderBy("createdAt", "desc")
+      );
+
+      onSnapshot(txRef, (snap) => {
+        setTransactions(
+          snap.docs.map((d) => ({
+            id: d.id,
+            ...d.data()
+          }))
+        );
+      });
+
+      onSnapshot(debtRef, (snap) => {
+        setDebts(
+          snap.docs.map((d) => ({
+            id: d.id,
+            ...d.data()
+          }))
+        );
+      });
+    });
+
+    return () => unsub();
+  }, []);
+
+  const balance = useMemo(() => {
+    return transactions.reduce((acc, tx) => {
+      if (tx.type === "income") return acc + Number(tx.amount);
+      return acc - Number(tx.amount);
+    }, 0);
+  }, [transactions]);
 
   const loginGoogle = async () => {
-    const provider = new GoogleAuthProvider()
-    await signInWithPopup(auth, provider)
-  }
+    try {
+      setError("");
+      await signInWithPopup(auth, provider);
+    } catch (err) {
+      console.log(err);
+      setError("Error iniciando sesión con Google.");
+    }
+  };
 
-  const logout = async () => {
-    await signOut(auth)
-  }
+  const handleEmailAuth = async () => {
+    try {
+      setError("");
 
-  const addTransaction = (e) => {
-    e.preventDefault()
+      if (isRegister) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err) {
+      console.log(err);
+      setError("Error en autenticación.");
+    }
+  };
 
-    const item = {
-      id: Date.now(),
-      ...txData,
-      amount: Number(txData.amount),
-      date: new Date().toISOString(),
+  const addTransaction = async () => {
+    try {
+      if (!formData.amount || !formData.category) return;
+
+      await addDoc(
+        collection(db, "users", user.uid, "transactions"),
+        {
+          ...formData,
+          amount: Number(formData.amount),
+          createdAt: Date.now()
+        }
+      );
+
+      setFormData({
+        type: "income",
+        amount: "",
+        category: ""
+      });
+
+      setShowTransactionModal(false);
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const addDebt = async () => {
+    try {
+      if (!debtData.name || !debtData.amount) return;
+
+      await addDoc(
+        collection(db, "users", user.uid, "debts"),
+        {
+          ...debtData,
+          amount: Number(debtData.amount),
+          createdAt: Date.now()
+        }
+      );
+
+      setDebtData({
+        name: "",
+        amount: "",
+        phone: "",
+        type: "they_owe"
+      });
+
+      setShowDebtModal(false);
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const deleteDebt = async (id) => {
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "debts", id));
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const sendWhatsApp = (mode) => {
+    if (!selectedDebt) return;
+
+    let msg = "";
+
+    if (mode === 1) {
+      msg = `Hola ${selectedDebt.name}, recuerda tu saldo pendiente de $${selectedDebt.amount}.`;
     }
 
-    setTransactions([item, ...transactions])
-
-    setTxData({
-      type: 'income',
-      category: '',
-      amount: '',
-    })
-
-    setShowTxModal(false)
-  }
-
-  const addDebt = (e) => {
-    e.preventDefault()
-
-    const item = {
-      id: Date.now(),
-      ...debtData,
-      amount: Number(debtData.amount),
+    if (mode === 2) {
+      msg = `Hola ${selectedDebt.name}, necesito el pago pendiente de $${selectedDebt.amount}.`;
     }
 
-    setDebts([item, ...debts])
-
-    setDebtData({
-      name: '',
-      amount: '',
-    })
-
-    setShowDebtModal(false)
-  }
-
-  const addOwnDebt = (e) => {
-    e.preventDefault()
-
-    const item = {
-      id: Date.now(),
-      ...debtData,
-      amount: Number(debtData.amount),
+    if (mode === 3) {
+      msg = `URGENTE ${selectedDebt.name}: el pago de $${selectedDebt.amount} debe realizarse hoy.`;
     }
 
-    setOwnDebts([item, ...ownDebts])
+    window.open(
+      `https://wa.me/${selectedDebt.phone}?text=${encodeURIComponent(msg)}`
+    );
+  };
 
-    setDebtData({
-      name: '',
-      amount: '',
-    })
-
-    setShowOwnDebtModal(false)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black text-cyan-400 flex items-center justify-center text-2xl font-black">
+        Cargando FinanzApp...
+      </div>
+    );
   }
-
-  const sendWhatsApp = (type) => {
-    if (!selectedDebt) return
-
-    const messages = {
-      friendly: `Hola ${selectedDebt.name}, te recuerdo amablemente el pago pendiente de $${selectedDebt.amount.toLocaleString('es-CO')}.`,
-      firm: `Hola ${selectedDebt.name}, tienes un saldo pendiente de $${selectedDebt.amount.toLocaleString('es-CO')}.`,
-      urgent: `URGENTE: ${selectedDebt.name}, el pago de $${selectedDebt.amount.toLocaleString('es-CO')} es prioritario.`,
-    }
-
-    const url = `https://wa.me/?text=${encodeURIComponent(messages[type])}`
-
-    window.open(url, '_blank')
-    setSelectedDebt(null)
-  }
-
-  const balance = transactions.reduce((acc, t) => {
-    return t.type === 'income' ? acc + t.amount : acc - t.amount
-  }, 0)
 
   if (!user) {
     return (
-      <div className='min-h-screen bg-black text-white flex items-center justify-center relative overflow-hidden'>
-        <div className='absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,255,0.12),transparent_60%)]' />
+      <div className="min-h-screen bg-black text-white flex items-center justify-center px-6 overflow-hidden relative">
 
-        <div className='relative z-10 w-full max-w-md p-6'>
-          <div className='text-center mb-10'>
-            <h1 className='text-6xl font-black text-cyan-400'>FINANZAPP</h1>
-            <p className='text-zinc-500 tracking-[6px] mt-3'>DEV ZAACK</p>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(0,255,255,0.15),transparent_40%)]" />
+
+        <div className="w-full max-w-md bg-zinc-950 border border-cyan-500/20 rounded-3xl p-8 relative z-10 animate-[zoomIn_0.7s_ease] shadow-[0_0_60px_rgba(0,255,255,0.15)]">
+
+          <div className="text-center mb-10">
+            <h1 className="text-5xl font-black tracking-tight text-cyan-400">
+              FinanzApp
+            </h1>
+
+            <p className="text-zinc-500 mt-2">
+              v1.1
+            </p>
+
+            <p className="text-xs tracking-[6px] uppercase mt-3 text-zinc-600">
+              DEV Zaack
+            </p>
           </div>
 
-          <Card>
-            <h2 className='text-2xl font-black text-center mb-3'>Sistema Privado</h2>
+          {error && (
+            <div className="bg-red-500/10 border border-red-500 text-red-400 p-4 rounded-2xl mb-6">
+              {error}
+            </div>
+          )}
 
-            <p className='text-zinc-500 text-center text-sm mb-8'>
-              Finanzas privadas • Seguridad activa
-            </p>
+          <div className="space-y-4">
+
+            <input
+              type="email"
+              placeholder="Correo electrónico"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+            />
+
+            <input
+              type="password"
+              placeholder="Contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+            />
+
+            <button
+              onClick={handleEmailAuth}
+              className="w-full bg-cyan-500 hover:bg-cyan-400 transition-all text-black py-4 rounded-2xl font-black"
+            >
+              {isRegister ? "Crear Cuenta" : "Iniciar Sesión"}
+            </button>
 
             <button
               onClick={loginGoogle}
-              className='w-full bg-cyan-400 text-black font-black py-4 rounded-2xl'
+              className="w-full border border-zinc-700 hover:border-cyan-500 transition-all py-4 rounded-2xl font-black"
             >
-              Iniciar sesión con Google
+              Continuar con Google
             </button>
 
-            <p className='text-center text-zinc-600 text-xs mt-6'>
-              FinanzApp v1.0.01
-            </p>
-          </Card>
+            <button
+              onClick={() => setIsRegister(!isRegister)}
+              className="w-full text-zinc-500 text-sm mt-3"
+            >
+              {isRegister
+                ? "Ya tengo cuenta"
+                : "Crear nueva cuenta"}
+            </button>
+
+          </div>
         </div>
+
+        <style>
+          {`
+          @keyframes zoomIn {
+            from {
+              opacity: 0;
+              transform: scale(0.92);
+            }
+
+            to {
+              opacity: 1;
+              transform: scale(1);
+            }
+          }
+
+          @keyframes fadeUp {
+            from {
+              opacity: 0;
+              transform: translateY(10px);
+            }
+
+            to {
+              opacity: 1;
+              transform: translateY(0px);
+            }
+          }
+          `}
+        </style>
+
       </div>
-    )
+    );
   }
 
   return (
-    <div className='min-h-screen bg-black text-white pb-28'>
-      <header className='p-6 flex justify-between items-center'>
+    <div className="min-h-screen bg-black text-white pb-28 animate-[fadeUp_0.4s_ease]">
+
+      <header className="p-6 flex items-center justify-between border-b border-zinc-900 backdrop-blur-xl sticky top-0 bg-black/80 z-50">
+
         <div>
-          <h1 className='text-3xl font-black text-cyan-400'>FINANZAPP</h1>
-          <p className='text-zinc-500 text-xs tracking-[4px]'>DEV ZAACK</p>
+          <h1 className="text-2xl font-black text-cyan-400">
+            FinanzApp
+          </h1>
+
+          <p className="text-[10px] tracking-[4px] uppercase text-zinc-600">
+            DEV Zaack
+          </p>
         </div>
+
+        <button
+          onClick={() => signOut(auth)}
+          className="bg-red-500/10 text-red-400 p-3 rounded-2xl"
+        >
+          <LogOut size={20} />
+        </button>
+
       </header>
 
-      <main className='px-6 max-w-md mx-auto space-y-6'>
-        {activeTab === 'wallet' && (
-          <>
-            <Card>
-              <p className='text-zinc-500 text-xs uppercase mb-2'>Balance actual</p>
+      <main className="p-5 max-w-md mx-auto space-y-6">
 
-              <h2 className='text-5xl font-black text-cyan-400 mb-8'>
-                ${balance.toLocaleString('es-CO')}
+        {activeTab === "wallet" && (
+          <div className="space-y-6 animate-[fadeUp_0.3s_ease]">
+
+            <div className="bg-gradient-to-br from-cyan-500 to-blue-700 rounded-3xl p-6 shadow-2xl">
+
+              <p className="text-sm opacity-80 mb-3">
+                Balance Total
+              </p>
+
+              <h2 className="text-5xl font-black mb-6">
+                ${balance}
               </h2>
 
               <button
-                onClick={() => setShowTxModal(true)}
-                className='w-full bg-cyan-400 text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2'
+                onClick={() => setShowTransactionModal(true)}
+                className="bg-black/30 hover:bg-black/40 transition-all px-5 py-4 rounded-2xl font-black flex items-center gap-2"
               >
                 <Plus size={20} />
-                NUEVA TRANSACCIÓN
+                Nueva Transacción
               </button>
-            </Card>
 
-            {transactions.length === 0 && (
-              <Card>
-                <p className='text-zinc-500'>No hay movimientos todavía.</p>
-              </Card>
-            )}
+            </div>
 
-            {transactions.map((t) => (
-              <Card key={t.id}>
-                <div className='flex justify-between items-center'>
+            <div className="space-y-3">
+
+              {transactions.length === 0 && (
+                <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-6 text-center text-zinc-500">
+                  No existen movimientos aún.
+                </div>
+              )}
+
+              {transactions.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 flex items-center justify-between"
+                >
+
                   <div>
-                    <p className='font-black'>{t.category}</p>
-                    <p className='text-zinc-500 text-xs'>
-                      {new Date(t.date).toLocaleDateString()}
+                    <p className="font-black">
+                      {tx.category}
+                    </p>
+
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {tx.type === "income"
+                        ? "Ingreso"
+                        : "Egreso"}
                     </p>
                   </div>
 
-                  <p className={`font-black ${t.type === 'income' ? 'text-cyan-400' : 'text-red-500'}`}>
-                    {t.type === 'income' ? '+' : '-'}${t.amount.toLocaleString('es-CO')}
-                  </p>
+                  <div
+                    className={`font-black text-xl ${
+                      tx.type === "income"
+                        ? "text-cyan-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {tx.type === "income" ? "+" : "-"}$
+                    {tx.amount}
+                  </div>
+
                 </div>
-              </Card>
-            ))}
-          </>
+              ))}
+
+            </div>
+
+          </div>
         )}
 
-        {activeTab === 'debts' && (
-          <>
-            <div className='flex justify-between items-center'>
-              <h2 className='text-2xl font-black'>Deudores</h2>
+        {activeTab === "debts" && (
+          <div className="space-y-4 animate-[fadeUp_0.3s_ease]">
+
+            <div className="flex items-center justify-between">
+
+              <h2 className="text-3xl font-black">
+                Deudas
+              </h2>
 
               <button
                 onClick={() => setShowDebtModal(true)}
-                className='bg-cyan-400 text-black p-3 rounded-2xl'
+                className="bg-cyan-500 text-black p-3 rounded-2xl"
               >
                 <Plus />
               </button>
+
             </div>
 
             {debts.length === 0 && (
-              <Card>
-                <p className='text-zinc-500'>No hay deudores registrados.</p>
-              </Card>
+              <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-6 text-center text-zinc-500">
+                No existen deudas registradas.
+              </div>
             )}
 
             {debts.map((d) => (
-              <Card key={d.id}>
-                <div className='flex justify-between items-center'>
-                  <div>
-                    <p className='font-black'>{d.name}</p>
-                    <p className='text-cyan-400 font-black'>
-                      ${d.amount.toLocaleString('es-CO')}
-                    </p>
-                  </div>
-
-                  <div className='flex gap-2'>
-                    <button
-                      onClick={() => setSelectedDebt(d)}
-                      className='p-3 bg-green-500/10 text-green-400 rounded-xl'
-                    >
-                      <MessageCircle size={18} />
-                    </button>
-
-                    <button
-                      onClick={() => setDebts(debts.filter((x) => x.id !== d.id))}
-                      className='p-3 bg-red-500/10 text-red-500 rounded-xl'
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </>
-        )}
-
-        {activeTab === 'ownDebts' && (
-          <>
-            <div className='flex justify-between items-center'>
-              <h2 className='text-2xl font-black'>A quien le debo</h2>
-
-              <button
-                onClick={() => setShowOwnDebtModal(true)}
-                className='bg-cyan-400 text-black p-3 rounded-2xl'
+              <div
+                key={d.id}
+                className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 flex items-center justify-between"
               >
-                <Plus />
-              </button>
-            </div>
 
-            {ownDebts.length === 0 && (
-              <Card>
-                <p className='text-zinc-500'>No tienes deudas registradas.</p>
-              </Card>
-            )}
+                <div>
+                  <p className="font-black text-xl">
+                    {d.name}
+                  </p>
 
-            {ownDebts.map((d) => (
-              <Card key={d.id}>
-                <p className='font-black'>{d.name}</p>
-                <p className='text-yellow-400 font-black'>
-                  ${d.amount.toLocaleString('es-CO')}
-                </p>
-              </Card>
+                  <p className="text-zinc-500 text-sm mt-1">
+                    {d.type === "they_owe"
+                      ? "Te deben"
+                      : "Debes"}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+
+                  <button
+                    onClick={() => {
+                      setSelectedDebt(d);
+                      setShowReminderModal(true);
+                    }}
+                    className="bg-green-500/10 text-green-400 p-3 rounded-2xl"
+                  >
+                    <MessageCircle size={18} />
+                  </button>
+
+                  <button
+                    onClick={() => deleteDebt(d.id)}
+                    className="bg-red-500/10 text-red-400 p-3 rounded-2xl"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+
+                </div>
+
+              </div>
             ))}
-          </>
+
+          </div>
         )}
 
-        {activeTab === 'analytics' && (
-          <Card>
-            <h2 className='text-2xl font-black mb-4'>Analytics</h2>
+        {activeTab === "analytics" && (
+          <div className="animate-[fadeUp_0.3s_ease]">
 
-            <div className='space-y-4'>
-              <div>
-                <p className='text-zinc-500 text-sm'>Ingresos</p>
-                <h3 className='text-cyan-400 text-2xl font-black'>
-                  ${transactions
-                    .filter((t) => t.type === 'income')
-                    .reduce((acc, t) => acc + t.amount, 0)
-                    .toLocaleString('es-CO')}
-                </h3>
+            <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-8 text-center">
+
+              <BarChart3
+                size={60}
+                className="mx-auto text-cyan-400 mb-5"
+              />
+
+              <h2 className="text-3xl font-black mb-4">
+                Analytics
+              </h2>
+
+              <div className="space-y-4 text-left mt-8">
+
+                <div className="bg-black rounded-2xl p-4 border border-zinc-800">
+                  <p className="text-zinc-500 text-sm">
+                    Transacciones
+                  </p>
+
+                  <h3 className="text-3xl font-black mt-2">
+                    {transactions.length}
+                  </h3>
+                </div>
+
+                <div className="bg-black rounded-2xl p-4 border border-zinc-800">
+                  <p className="text-zinc-500 text-sm">
+                    Deudas registradas
+                  </p>
+
+                  <h3 className="text-3xl font-black mt-2">
+                    {debts.length}
+                  </h3>
+                </div>
+
               </div>
 
-              <div>
-                <p className='text-zinc-500 text-sm'>Gastos</p>
-                <h3 className='text-red-500 text-2xl font-black'>
-                  ${transactions
-                    .filter((t) => t.type === 'expense')
-                    .reduce((acc, t) => acc + t.amount, 0)
-                    .toLocaleString('es-CO')}
-                </h3>
-              </div>
             </div>
-          </Card>
+
+          </div>
         )}
 
-        {activeTab === 'settings' && (
-          <Card>
-            <h2 className='text-2xl font-black mb-6'>Ajustes</h2>
-
-            <p className='text-zinc-500 text-sm'>Usuario activo</p>
-            <p className='font-black mb-6'>{user.email}</p>
-
-            <button
-              onClick={logout}
-              className='w-full bg-red-500/10 text-red-500 py-4 rounded-2xl font-black flex items-center justify-center gap-2'
-            >
-              <LogOut size={18} />
-              CERRAR SESIÓN
-            </button>
-          </Card>
-        )}
       </main>
 
-      <nav className='fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-xl border-t border-cyan-500/10 p-4 flex justify-around'>
-        <NavBtn
-          icon={<Wallet size={22} />}
-          active={activeTab === 'wallet'}
-          onClick={() => setActiveTab('wallet')}
-        />
+      <nav className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-xl border-t border-zinc-900 p-4 flex items-center justify-around">
 
-        <NavBtn
-          icon={<Users size={22} />}
-          active={activeTab === 'debts'}
-          onClick={() => setActiveTab('debts')}
-        />
+        <button
+          onClick={() => setActiveTab("wallet")}
+          className={`p-3 rounded-2xl transition-all ${
+            activeTab === "wallet"
+              ? "bg-cyan-500 text-black"
+              : "text-zinc-500"
+          }`}
+        >
+          <Wallet />
+        </button>
 
-        <NavBtn
-          icon={<CreditCard size={22} />}
-          active={activeTab === 'ownDebts'}
-          onClick={() => setActiveTab('ownDebts')}
-        />
+        <button
+          onClick={() => setActiveTab("debts")}
+          className={`p-3 rounded-2xl transition-all ${
+            activeTab === "debts"
+              ? "bg-cyan-500 text-black"
+              : "text-zinc-500"
+          }`}
+        >
+          <Users />
+        </button>
 
-        <NavBtn
-          icon={<BarChart3 size={22} />}
-          active={activeTab === 'analytics'}
-          onClick={() => setActiveTab('analytics')}
-        />
+        <button
+          onClick={() => setActiveTab("analytics")}
+          className={`p-3 rounded-2xl transition-all ${
+            activeTab === "analytics"
+              ? "bg-cyan-500 text-black"
+              : "text-zinc-500"
+          }`}
+        >
+          <BarChart3 />
+        </button>
 
-        <NavBtn
-          icon={<Settings size={22} />}
-          active={activeTab === 'settings'}
-          onClick={() => setActiveTab('settings')}
-        />
+        <button
+          onClick={() => setActiveTab("settings")}
+          className={`p-3 rounded-2xl transition-all ${
+            activeTab === "settings"
+              ? "bg-cyan-500 text-black"
+              : "text-zinc-500"
+          }`}
+        >
+          <Settings />
+        </button>
+
       </nav>
 
-      {showTxModal && (
-        <Modal>
-          <h2 className='text-2xl font-black mb-5'>Nueva Transacción</h2>
+      {showTransactionModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-5 animate-[fadeUp_0.3s_ease]">
 
-          <form onSubmit={addTransaction} className='space-y-4'>
-            <select
-              value={txData.type}
-              onChange={(e) => setTxData({ ...txData, type: e.target.value })}
-              className='w-full p-4 rounded-2xl bg-zinc-900 border border-cyan-500/20 outline-none'
-            >
-              <option value='income'>Ingreso</option>
-              <option value='expense'>Gasto</option>
-            </select>
+          <div className="w-full max-w-md bg-zinc-950 border border-cyan-500/20 rounded-3xl p-6">
 
-            <input
-              required
-              type='text'
-              placeholder='Categoría'
-              value={txData.category}
-              onChange={(e) => setTxData({ ...txData, category: e.target.value })}
-              className='w-full p-4 rounded-2xl bg-zinc-900 border border-cyan-500/20 outline-none'
-            />
+            <div className="flex items-center justify-between mb-6">
 
-            <input
-              required
-              type='number'
-              placeholder='Monto'
-              value={txData.amount}
-              onChange={(e) => setTxData({ ...txData, amount: e.target.value })}
-              className='w-full p-4 rounded-2xl bg-zinc-900 border border-cyan-500/20 outline-none'
-            />
+              <button
+                onClick={() => setShowTransactionModal(false)}
+                className="bg-zinc-900 p-2 rounded-xl"
+              >
+                <ChevronLeft />
+              </button>
 
-            <button className='w-full bg-cyan-400 text-black font-black py-4 rounded-2xl'>
-              GUARDAR
-            </button>
-          </form>
-        </Modal>
+              <h2 className="font-black text-xl">
+                Nueva Transacción
+              </h2>
+
+              <button
+                onClick={() => setShowTransactionModal(false)}
+                className="bg-red-500/10 text-red-400 p-2 rounded-xl"
+              >
+                <X />
+              </button>
+
+            </div>
+
+            <div className="space-y-4">
+
+              <select
+                value={formData.type}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    type: e.target.value
+                  })
+                }
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+              >
+                <option value="income">Ingreso</option>
+                <option value="expense">Egreso</option>
+              </select>
+
+              <input
+                type="number"
+                placeholder="Monto"
+                value={formData.amount}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    amount: e.target.value
+                  })
+                }
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+              />
+
+              <input
+                type="text"
+                placeholder="Categoría"
+                value={formData.category}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    category: e.target.value
+                  })
+                }
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+              />
+
+              <button
+                onClick={addTransaction}
+                className="w-full bg-cyan-500 text-black py-4 rounded-2xl font-black"
+              >
+                Guardar
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
       )}
 
       {showDebtModal && (
-        <Modal>
-          <h2 className='text-2xl font-black mb-5'>Nuevo Deudor</h2>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-5 animate-[fadeUp_0.3s_ease]">
 
-          <form onSubmit={addDebt} className='space-y-4'>
-            <input
-              required
-              type='text'
-              placeholder='Nombre'
-              value={debtData.name}
-              onChange={(e) => setDebtData({ ...debtData, name: e.target.value })}
-              className='w-full p-4 rounded-2xl bg-zinc-900 border border-cyan-500/20 outline-none'
-            />
+          <div className="w-full max-w-md bg-zinc-950 border border-cyan-500/20 rounded-3xl p-6">
 
-            <input
-              required
-              type='number'
-              placeholder='Monto'
-              value={debtData.amount}
-              onChange={(e) => setDebtData({ ...debtData, amount: e.target.value })}
-              className='w-full p-4 rounded-2xl bg-zinc-900 border border-cyan-500/20 outline-none'
-            />
+            <div className="flex items-center justify-between mb-6">
 
-            <button className='w-full bg-cyan-400 text-black font-black py-4 rounded-2xl'>
-              GUARDAR
-            </button>
-          </form>
-        </Modal>
-      )}
+              <button
+                onClick={() => setShowDebtModal(false)}
+                className="bg-zinc-900 p-2 rounded-xl"
+              >
+                <ChevronLeft />
+              </button>
 
-      {showOwnDebtModal && (
-        <Modal>
-          <h2 className='text-2xl font-black mb-5'>Nueva Deuda</h2>
+              <h2 className="font-black text-xl">
+                Nueva Deuda
+              </h2>
 
-          <form onSubmit={addOwnDebt} className='space-y-4'>
-            <input
-              required
-              type='text'
-              placeholder='Nombre'
-              value={debtData.name}
-              onChange={(e) => setDebtData({ ...debtData, name: e.target.value })}
-              className='w-full p-4 rounded-2xl bg-zinc-900 border border-cyan-500/20 outline-none'
-            />
+              <button
+                onClick={() => setShowDebtModal(false)}
+                className="bg-red-500/10 text-red-400 p-2 rounded-xl"
+              >
+                <X />
+              </button>
 
-            <input
-              required
-              type='number'
-              placeholder='Monto'
-              value={debtData.amount}
-              onChange={(e) => setDebtData({ ...debtData, amount: e.target.value })}
-              className='w-full p-4 rounded-2xl bg-zinc-900 border border-cyan-500/20 outline-none'
-            />
+            </div>
 
-            <button className='w-full bg-cyan-400 text-black font-black py-4 rounded-2xl'>
-              GUARDAR
-            </button>
-          </form>
-        </Modal>
-      )}
+            <div className="space-y-4">
 
-      {selectedDebt && (
-        <Modal>
-          <h2 className='text-2xl font-black mb-5'>WhatsApp</h2>
+              <input
+                type="text"
+                placeholder="Nombre"
+                value={debtData.name}
+                onChange={(e) =>
+                  setDebtData({
+                    ...debtData,
+                    name: e.target.value
+                  })
+                }
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+              />
 
-          <div className='space-y-3'>
-            <button
-              onClick={() => sendWhatsApp('friendly')}
-              className='w-full bg-cyan-400 text-black font-black py-4 rounded-2xl'
-            >
-              Recordatorio amable
-            </button>
+              <input
+                type="number"
+                placeholder="Monto"
+                value={debtData.amount}
+                onChange={(e) =>
+                  setDebtData({
+                    ...debtData,
+                    amount: e.target.value
+                  })
+                }
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+              />
 
-            <button
-              onClick={() => sendWhatsApp('firm')}
-              className='w-full bg-yellow-400 text-black font-black py-4 rounded-2xl'
-            >
-              Recordatorio firme
-            </button>
+              <input
+                type="text"
+                placeholder="WhatsApp"
+                value={debtData.phone}
+                onChange={(e) =>
+                  setDebtData({
+                    ...debtData,
+                    phone: e.target.value
+                  })
+                }
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+              />
 
-            <button
-              onClick={() => sendWhatsApp('urgent')}
-              className='w-full bg-red-500 text-white font-black py-4 rounded-2xl'
-            >
-              Recordatorio urgente
-            </button>
+              <select
+                value={debtData.type}
+                onChange={(e) =>
+                  setDebtData({
+                    ...debtData,
+                    type: e.target.value
+                  })
+                }
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
+              >
+                <option value="they_owe">Me Deben</option>
+                <option value="i_owe">Yo Debo</option>
+              </select>
+
+              <button
+                onClick={addDebt}
+                className="w-full bg-cyan-500 text-black py-4 rounded-2xl font-black"
+              >
+                Guardar
+              </button>
+
+            </div>
+
           </div>
-        </Modal>
+
+        </div>
       )}
+
+      {showReminderModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-5 animate-[fadeUp_0.3s_ease]">
+
+          <div className="w-full max-w-md bg-zinc-950 border border-cyan-500/20 rounded-3xl p-6">
+
+            <div className="flex items-center justify-between mb-6">
+
+              <button
+                onClick={() => setShowReminderModal(false)}
+                className="bg-zinc-900 p-2 rounded-xl"
+              >
+                <ChevronLeft />
+              </button>
+
+              <h2 className="font-black text-xl">
+                WhatsApp
+              </h2>
+
+              <button
+                onClick={() => setShowReminderModal(false)}
+                className="bg-red-500/10 text-red-400 p-2 rounded-xl"
+              >
+                <X />
+              </button>
+
+            </div>
+
+            <div className="space-y-3">
+
+              <button
+                onClick={() => sendWhatsApp(1)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 font-black"
+              >
+                Recordatorio Amable
+              </button>
+
+              <button
+                onClick={() => sendWhatsApp(2)}
+                className="w-full bg-yellow-500/20 text-yellow-400 rounded-2xl py-4 font-black"
+              >
+                Recordatorio Firme
+              </button>
+
+              <button
+                onClick={() => sendWhatsApp(3)}
+                className="w-full bg-red-500/20 text-red-400 rounded-2xl py-4 font-black"
+              >
+                Recordatorio Urgente
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
     </div>
-  )
+  );
 }
