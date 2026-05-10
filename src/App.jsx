@@ -30,10 +30,11 @@ import {
   doc,
   onSnapshot,
   query,
-  orderBy
+  orderBy,
+  serverTimestamp
 } from "firebase/firestore";
 
-import { auth, provider, db } from "./firebase";
+import { auth, db, googleProvider as provider } from "./firebase/config";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -57,6 +58,9 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
   const [formData, setFormData] = useState({
     type: "income",
     amount: "",
@@ -71,11 +75,22 @@ export default function App() {
   });
 
   useEffect(() => {
+    // Guardamos las funciones para cerrar los escuchas de Firestore
+    let unsubTx = null;
+    let unsubDebts = null;
+
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
 
-      if (!u) return;
+      // Si el usuario cierra sesión, cerramos los escuchas activos
+      if (!u) {
+        if (unsubTx) unsubTx();
+        if (unsubDebts) unsubDebts();
+        setTransactions([]);
+        setDebts([]);
+        return;
+      }
 
       const txRef = query(
         collection(db, "users", u.uid, "transactions"),
@@ -87,7 +102,8 @@ export default function App() {
         orderBy("createdAt", "desc")
       );
 
-      onSnapshot(txRef, (snap) => {
+      // Guardamos la función de cierre que devuelve onSnapshot
+      unsubTx = onSnapshot(txRef, (snap) => {
         setTransactions(
           snap.docs.map((d) => ({
             id: d.id,
@@ -96,7 +112,7 @@ export default function App() {
         );
       });
 
-      onSnapshot(debtRef, (snap) => {
+      unsubDebts = onSnapshot(debtRef, (snap) => {
         setDebts(
           snap.docs.map((d) => ({
             id: d.id,
@@ -106,7 +122,12 @@ export default function App() {
       });
     });
 
-    return () => unsub();
+    // Al desmontar el componente, cerramos todo
+    return () => {
+      unsub();
+      if (unsubTx) unsubTx();
+      if (unsubDebts) unsubDebts();
+    };
   }, []);
 
   const balance = useMemo(() => {
@@ -142,61 +163,67 @@ export default function App() {
   };
 
   const addTransaction = async () => {
+    if (!formData.amount || !formData.category) return;
+    if (Number(formData.amount) <= 0) {
+      setSaveError("El monto debe ser mayor a cero.");
+      return;
+    }
     try {
-      if (!formData.amount || !formData.category) return;
-
+      setSaving(true);
+      setSaveError("");
       await addDoc(
         collection(db, "users", user.uid, "transactions"),
         {
           ...formData,
           amount: Number(formData.amount),
-          createdAt: Date.now()
+          createdAt: serverTimestamp()
         }
       );
-
-      setFormData({
-        type: "income",
-        amount: "",
-        category: ""
-      });
-
+      setFormData({ type: "income", amount: "", category: "" });
       setShowTransactionModal(false);
     } catch (err) {
       console.log(err);
+      setSaveError("Error al guardar. Revisa tu conexión.");
+    } finally {
+      setSaving(false);
     }
   };
 
   const addDebt = async () => {
+    if (!debtData.name || !debtData.amount) return;
+    if (Number(debtData.amount) <= 0) {
+      setSaveError("El monto debe ser mayor a cero.");
+      return;
+    }
     try {
-      if (!debtData.name || !debtData.amount) return;
-
+      setSaving(true);
+      setSaveError("");
       await addDoc(
         collection(db, "users", user.uid, "debts"),
         {
           ...debtData,
           amount: Number(debtData.amount),
-          createdAt: Date.now()
+          createdAt: serverTimestamp()
         }
       );
-
-      setDebtData({
-        name: "",
-        amount: "",
-        phone: "",
-        type: "they_owe"
-      });
-
+      setDebtData({ name: "", amount: "", phone: "", type: "they_owe" });
       setShowDebtModal(false);
     } catch (err) {
       console.log(err);
+      setSaveError("Error al guardar. Revisa tu conexión.");
+    } finally {
+      setSaving(false);
     }
   };
 
   const deleteDebt = async (id) => {
+    const confirmar = window.confirm("¿Seguro que quieres eliminar esta deuda?");
+    if (!confirmar) return;
     try {
       await deleteDoc(doc(db, "users", user.uid, "debts", id));
     } catch (err) {
       console.log(err);
+      alert("Error al eliminar. Revisa tu conexión.");
     }
   };
 
@@ -374,7 +401,10 @@ export default function App() {
               </h2>
 
               <button
-                onClick={() => setShowTransactionModal(true)}
+                onClick={() => {
+                  setSaveError("");
+                  setShowTransactionModal(true);
+                }}
                 className="bg-black/30 hover:bg-black/40 transition-all px-5 py-4 rounded-2xl font-black flex items-center gap-2"
               >
                 <Plus size={20} />
@@ -438,7 +468,10 @@ export default function App() {
               </h2>
 
               <button
-                onClick={() => setShowDebtModal(true)}
+                onClick={() => {
+                  setSaveError("");
+                  setShowDebtModal(true);
+                }}
                 className="bg-cyan-500 text-black p-3 rounded-2xl"
               >
                 <Plus />
@@ -619,13 +652,16 @@ export default function App() {
 
             <div className="space-y-4">
 
+              {saveError && (
+                <div className="bg-red-500/10 border border-red-500 text-red-400 p-3 rounded-2xl text-sm">
+                  {saveError}
+                </div>
+              )}
+
               <select
                 value={formData.type}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    type: e.target.value
-                  })
+                  setFormData({ ...formData, type: e.target.value })
                 }
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
               >
@@ -638,10 +674,7 @@ export default function App() {
                 placeholder="Monto"
                 value={formData.amount}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    amount: e.target.value
-                  })
+                  setFormData({ ...formData, amount: e.target.value })
                 }
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
               />
@@ -651,19 +684,17 @@ export default function App() {
                 placeholder="Categoría"
                 value={formData.category}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    category: e.target.value
-                  })
+                  setFormData({ ...formData, category: e.target.value })
                 }
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
               />
 
               <button
                 onClick={addTransaction}
-                className="w-full bg-cyan-500 text-black py-4 rounded-2xl font-black"
+                disabled={saving}
+                className="w-full bg-cyan-500 text-black py-4 rounded-2xl font-black disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Guardar
+                {saving ? "Guardando..." : "Guardar"}
               </button>
 
             </div>
@@ -702,15 +733,18 @@ export default function App() {
 
             <div className="space-y-4">
 
+              {saveError && (
+                <div className="bg-red-500/10 border border-red-500 text-red-400 p-3 rounded-2xl text-sm">
+                  {saveError}
+                </div>
+              )}
+
               <input
                 type="text"
                 placeholder="Nombre"
                 value={debtData.name}
                 onChange={(e) =>
-                  setDebtData({
-                    ...debtData,
-                    name: e.target.value
-                  })
+                  setDebtData({ ...debtData, name: e.target.value })
                 }
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
               />
@@ -720,10 +754,7 @@ export default function App() {
                 placeholder="Monto"
                 value={debtData.amount}
                 onChange={(e) =>
-                  setDebtData({
-                    ...debtData,
-                    amount: e.target.value
-                  })
+                  setDebtData({ ...debtData, amount: e.target.value })
                 }
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
               />
@@ -733,10 +764,7 @@ export default function App() {
                 placeholder="WhatsApp"
                 value={debtData.phone}
                 onChange={(e) =>
-                  setDebtData({
-                    ...debtData,
-                    phone: e.target.value
-                  })
+                  setDebtData({ ...debtData, phone: e.target.value })
                 }
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
               />
@@ -744,10 +772,7 @@ export default function App() {
               <select
                 value={debtData.type}
                 onChange={(e) =>
-                  setDebtData({
-                    ...debtData,
-                    type: e.target.value
-                  })
+                  setDebtData({ ...debtData, type: e.target.value })
                 }
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 outline-none"
               >
@@ -757,9 +782,10 @@ export default function App() {
 
               <button
                 onClick={addDebt}
-                className="w-full bg-cyan-500 text-black py-4 rounded-2xl font-black"
+                disabled={saving}
+                className="w-full bg-cyan-500 text-black py-4 rounded-2xl font-black disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Guardar
+                {saving ? "Guardando..." : "Guardar"}
               </button>
 
             </div>
